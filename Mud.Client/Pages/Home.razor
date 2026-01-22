@@ -1,0 +1,117 @@
+@rendermode InteractiveWebAssembly
+@page "/"
+@using Mud.Shared
+@using Mud.Client.Services
+@inject GameClient GameClient
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Mud</PageTitle>
+
+<div @onkeydown="HandleKeyDown" tabindex="0" style="outline: none;" id="game-container">
+    <h1>Mud V0</h1>
+
+    @if (_snapshot == null)
+    {
+        <p>Connecting...</p>
+    }
+    else
+    {
+        <p>Tick: @_snapshot.Tick | Players: @_snapshot.Players.Count</p>
+        <div id="pixi-container" style="width: 800px; height: 600px; border: 1px solid #ccc;"></div>
+    }
+</div>
+
+@code {
+    private WorldSnapshot? _snapshot;
+    private bool _pixiInitialized = false;
+    private List<Direction> _localInputQueue = new();
+    private List<Point> _localQueuedPath = new();
+    private string? _myPlayerId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        GameClient.OnWorldUpdate += HandleWorldUpdate;
+        await GameClient.StartAsync();
+        _myPlayerId = Guid.NewGuid().ToString(); // We should probably get this from the server, but for now...
+        await GameClient.JoinAsync("Player" + Random.Shared.Next(100));
+    }
+
+    private async void HandleWorldUpdate(WorldSnapshot snapshot)
+    {
+        _snapshot = snapshot;
+        
+        // Reconcile local queue with server state
+        var me = _snapshot.Players.FirstOrDefault(p => p.Id == GameClient.ConnectionId);
+        if (me != null)
+        {
+            // Update local input queue length based on server's queued path
+            // This is a simple reconciliation: we assume server is truth
+            while (_localInputQueue.Count > me.QueuedPath.Count)
+            {
+                _localInputQueue.RemoveAt(0);
+            }
+        }
+
+        if (!_pixiInitialized && _snapshot != null)
+        {
+            _pixiInitialized = true;
+            StateHasChanged();
+            await Task.Delay(100); // Wait for container to render
+            await JS.InvokeVoidAsync("initPixi", "pixi-container");
+        }
+
+        if (_pixiInitialized)
+        {
+            await JS.InvokeVoidAsync("renderSnapshot", snapshot);
+        }
+        
+        StateHasChanged();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        Direction? dir = e.Key switch
+        {
+            "ArrowUp" or "w" => Direction.Up,
+            "ArrowDown" or "s" => Direction.Down,
+            "ArrowLeft" or "a" => Direction.Left,
+            "ArrowRight" or "d" => Direction.Right,
+            _ => null
+        };
+
+        if (dir.HasValue)
+        {
+            if (_localInputQueue.Count > 0)
+            {
+                var lastDir = _localInputQueue.Last();
+                if (IsOpposite(lastDir, dir.Value))
+                {
+                    _localInputQueue.Clear();
+                    // We'd need a way to tell server to clear too, 
+                    // but for now let's just not add the opposite move.
+                    return;
+                }
+            }
+
+            if (_localInputQueue.Count < 5)
+            {
+                _localInputQueue.Add(dir.Value);
+                await GameClient.MoveAsync(dir.Value);
+            }
+        }
+    }
+
+    private bool IsOpposite(Direction d1, Direction d2)
+    {
+        return (d1 == Direction.Up && d2 == Direction.Down) ||
+               (d1 == Direction.Down && d2 == Direction.Up) ||
+               (d1 == Direction.Left && d2 == Direction.Right) ||
+               (d1 == Direction.Right && d2 == Direction.Left);
+    }
+
+    public void Dispose()
+    {
+        GameClient.OnWorldUpdate -= HandleWorldUpdate;
+    }
+}

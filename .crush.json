@@ -1,0 +1,32 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "options": {
+    "skills_paths": [
+      ".agent/skills/"
+    ]
+  },
+  "providers": {
+    "poe": {
+      "id": "poe",
+      "name": "Poe",
+      "type": "openai-compat",
+      "base_url": "https://api.poe.com/v1",
+      "api_key": "898P3VZl_2vy9tAxjiJUHxqgc1nxF0sHDACSE1KOUq4",
+      "models": [
+        {
+          "id": "gemini-3-flash",
+          "name": "Gemini 3 Flash",
+          "context_window": 1000000,
+          "default_max_tokens": 8192,
+          "cost_per_1m_in": 0.40,
+          "cost_per_1m_out": 2.40,
+          "cost_per_1m_in_cached": 0,
+          "cost_per_1m_out_cached": 0,
+          "can_reason": false,
+          "supports_attachments": true,
+          "options": {}
+        }
+      ]
+    }
+  }
+}

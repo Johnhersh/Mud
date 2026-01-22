@@ -1,0 +1,33 @@
+# C# / .NET
+bin/
+obj/
+publish/
+dist/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Secrets and local config
+*.pfx
+*.publishsettings
+
+# IDE
+.idea/
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Claude Code
+.claude/
