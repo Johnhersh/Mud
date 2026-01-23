@@ -30,9 +30,11 @@ The solution is divided into three main projects:
 ## 🎨 Frontend & Rendering
 
 - **Rendering Engine**: **PixiJS** is used for high-performance WebGL rendering.
+- **Tileset**: Uses `Mud.Server/wwwroot/assets/colored-transparent.png` (16x16 tiles with 1px spacing).
+- **Pixel Perfection**: `scaleMode` is set to `nearest` and `mipmap` is disabled to ensure crisp ASCII visuals.
 - **JS Interop**: Blazor communicates with PixiJS via `IJSRuntime`. 
-  - `initPixi(containerId)`: Initializes the Pixi application.
-  - `renderSnapshot(snapshot)`: Updates the visual state based on the latest server snapshot.
+  - `initPixi(containerId)`: Initializes the Pixi application, layers (floor, wall, player, ui), and loads assets.
+  - `renderSnapshot(snapshot)`: Updates the visual state using a persistent sprite management system for performance and stability.
 - **Location**: JavaScript rendering logic is located in `Mud.Server/wwwroot/game.js`.
 
 ## 📝 Coding Conventions
@@ -62,10 +64,11 @@ When the user says to implement a task, look for it in this tasks folder.
 
 ## 🏁 Task Closing Flow
 
-When a task is completed and the user asks to "close the task":
+When a task is completed and the user says "finalize", "close the task", or "I'm happy with this task", or something similar about ending the task:
 1. **Cleanup**: Delete the corresponding `.md` file from `.agent/tasks/`.
 2. **Documentation**: Update `AGENTS.md` (or other relevant memory files) to reflect the new state of the project, including any new features, architectural changes, or roadmap progress.
 3. **Verification**: Ensure the project still builds and the todo list is cleared.
+4. **Completion**: Use the `todos` tool to clear the list and provide a concise summary of the final state.
 
 ## 🗺 Roadmap (V0 Prototype)
 1. **Phase 1**: Project Scaffolding (Done)
@@ -73,4 +76,5 @@ When a task is completed and the user asks to "close the task":
 3. **Phase 3**: Frontend Core / Input (Done)
 4. **Phase 4**: Rendering / PixiJS (Done)
 5. **Phase 5**: Movement Queuing (Done)
-6. **Phase 6**: Testing & Validation (Pending)
+6. **Phase 6**: Tileset Rendering (Done)
+7. **Phase 7**: Testing & Validation (Pending)
