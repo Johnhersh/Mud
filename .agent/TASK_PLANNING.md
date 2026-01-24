@@ -54,16 +54,20 @@ When the user asks "what should I work on next":
 6. **Codebase Exploration**:
    - Search for relevant C# classes (Server/Shared) and JS rendering logic.
    - Understand existing SignalR hub methods and MessagePack models.
-7. **Draft Initial Task Spec**:
+7. **Interactive Technical Discovery**:
+   - Ask ONE question at a time to resolve technical ambiguities found during exploration.
+   - Discuss specific implementation patterns (e.g., "Should we use a new SignalR method or extend the existing move command?").
+8. **Draft Initial Task Spec**:
    - Define necessary changes to `Mud.Server`, `Mud.Client`, and `Mud.Shared`.
    - Outline the SignalR message flow and rendering updates.
 
 **CRITICAL CHECKPOINT:** Perform edge case analysis (e.g., race conditions in movement, chunk loading failures).
 
-8. **Edge Case Analysis**:
+9. **Edge Case & Integration Analysis**:
    - Examine existing implementations for integration challenges.
-   - Ask user about specific technical concerns based on code findings.
-9. **Finalize Task Document**: Create a `.md` file in the `.agent/tasks/` folder.
+   - Identify potential bugs (e.g., "What happens if the target dies while a projectile is in flight?").
+   - Present found edge cases to the user and ask for preferred handling.
+10. **Finalize Task Document**: You MUST use the `write` tool to create a `.md` file in the `.agent/tasks/` folder. Do not just output the text to the chat.
 
 **IMPORTANT:** Planning ends with the creation of the task specification. Do NOT begin implementation during planning.
 

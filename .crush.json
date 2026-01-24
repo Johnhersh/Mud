@@ -5,6 +5,11 @@
       ".agent/skills/"
     ]
   },
+  "permissions": {
+    "allowed_tools": [
+      "bash dotnet build"
+    ]
+  },
   "providers": {
     "poe": {
       "id": "poe",

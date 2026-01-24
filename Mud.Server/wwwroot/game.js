@@ -82,7 +82,7 @@ function getPersistentSprite(id, texture, container) {
     return sprite;
 }
 
-window.renderSnapshot = (snapshot) => {
+window.renderSnapshot = (snapshot, targetId) => {
     if (!app || !tilesetTexture || !floor) return;
     
     spriteMap.forEach(s => s.usedThisFrame = false);
@@ -106,11 +106,12 @@ window.renderSnapshot = (snapshot) => {
     });
     
     const playerTexture = getTexture(25, 0);
+    const monsterTexture = getTexture(26, 2);
 
-    snapshot.players.forEach(p => {
-        if (p.queuedPath) {
-            p.queuedPath.forEach((pt, index) => {
-                const id = `path-${p.id}-${index}`;
+    snapshot.entities.forEach(e => {
+        if (e.queuedPath) {
+            e.queuedPath.forEach((pt, index) => {
+                const id = `path-${e.id}-${index}`;
                 let g = pathGraphicsMap.get(id);
                 if (!g) {
                     g = new PIXI.Graphics();
@@ -127,13 +128,51 @@ window.renderSnapshot = (snapshot) => {
             });
         }
 
-        const id = `player-${p.id}`;
-        const s = getPersistentSprite(id, playerTexture, playerLayer);
-        s.x = Math.round(p.position.x * renderScale + offsetX);
-        s.y = Math.round(p.position.y * renderScale + offsetY);
+        const id = `entity-${e.id}`;
+        const texture = e.type === 0 ? playerTexture : monsterTexture; // 0: Player, 1: Monster
+        const s = getPersistentSprite(id, texture, playerLayer);
+        s.x = Math.round(e.position.x * renderScale + offsetX);
+        s.y = Math.round(e.position.y * renderScale + offsetY);
         s.width = renderScale;
         s.height = renderScale;
-        s.tint = 0xffff00;
+        s.tint = e.type === 0 ? 0xffff00 : 0xff0000;
+
+        // Render health bar
+        const healthId = `health-${e.id}`;
+        let hg = pathGraphicsMap.get(healthId);
+        if (!hg) {
+            hg = new PIXI.Graphics();
+            uiLayer.addChild(hg);
+            pathGraphicsMap.set(healthId, hg);
+        }
+        hg.clear();
+        hg.rect(0, 0, renderScale, 2);
+        hg.fill({ color: 0x000000 });
+        hg.rect(0, 0, renderScale * (e.health / e.maxHealth), 2);
+        hg.fill({ color: 0x00ff00 });
+        hg.x = s.x;
+        hg.y = s.y - 4;
+        hg.visible = true;
+        hg.usedThisFrame = true;
+
+        // Render reticle if targeted
+        if (e.id === targetId) {
+            const reticleId = `reticle-${e.id}`;
+            let rg = pathGraphicsMap.get(reticleId);
+            if (!rg) {
+                rg = new PIXI.Graphics();
+                uiLayer.addChild(rg);
+                pathGraphicsMap.set(reticleId, rg);
+            }
+            rg.clear();
+            rg.setStrokeStyle({ width: 2, color: 0xffffff });
+            rg.rect(0, 0, renderScale, renderScale);
+            rg.stroke();
+            rg.x = s.x;
+            rg.y = s.y;
+            rg.visible = true;
+            rg.usedThisFrame = true;
+        }
     });
 
     // Cleanup unused sprites

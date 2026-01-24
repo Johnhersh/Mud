@@ -17,7 +17,7 @@
     }
     else
     {
-        <p>Tick: @_snapshot.Tick | Players: @_snapshot.Players.Count</p>
+        <p>Tick: @_snapshot.Tick | Entities: @_snapshot.Entities.Count | Target: @(_targetId ?? "None")</p>
         <div id="pixi-container" style="width: 800px; height: 600px; border: 1px solid #ccc;"></div>
     }
 </div>
@@ -28,6 +28,7 @@
     private List<Direction> _localInputQueue = new();
     private List<Point> _localQueuedPath = new();
     private string? _myPlayerId;
+    private string? _targetId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -42,7 +43,7 @@
         _snapshot = snapshot;
         
         // Reconcile local queue with server state
-        var me = _snapshot.Players.FirstOrDefault(p => p.Id == GameClient.ConnectionId);
+        var me = _snapshot.Entities.FirstOrDefault(p => p.Id == GameClient.ConnectionId);
         if (me != null)
         {
             // Update local input queue length based on server's queued path
@@ -51,6 +52,12 @@
             {
                 _localInputQueue.RemoveAt(0);
             }
+        }
+
+        // Validate target still exists
+        if (_targetId != null && !_snapshot.Entities.Any(e => e.Id == _targetId))
+        {
+            _targetId = null;
         }
 
         if (!_pixiInitialized && _snapshot != null)
@@ -63,7 +70,7 @@
 
         if (_pixiInitialized)
         {
-            await JS.InvokeVoidAsync("renderSnapshot", snapshot);
+            await JS.InvokeVoidAsync("renderSnapshot", snapshot, _targetId);
         }
         
         StateHasChanged();
@@ -71,6 +78,22 @@
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        if (e.Key == "Tab")
+        {
+            CycleTarget();
+            return;
+        }
+
+        if (e.Key == "f")
+        {
+            if (_targetId != null)
+            {
+                _localInputQueue.Clear();
+                await GameClient.RangedAttackAsync(_targetId);
+            }
+            return;
+        }
+
         Direction? dir = e.Key switch
         {
             "ArrowUp" or "w" => Direction.Up,
@@ -98,6 +121,35 @@
             {
                 _localInputQueue.Add(dir.Value);
                 await GameClient.MoveAsync(dir.Value);
+            }
+        }
+    }
+
+    private void CycleTarget()
+    {
+        if (_snapshot == null) return;
+
+        var monsters = _snapshot.Entities.Where(e => e.Type == EntityType.Monster).ToList();
+        if (!monsters.Any())
+        {
+            _targetId = null;
+            return;
+        }
+
+        if (_targetId == null)
+        {
+            _targetId = monsters.First().Id;
+        }
+        else
+        {
+            var currentIndex = monsters.FindIndex(m => m.Id == _targetId);
+            if (currentIndex == -1 || currentIndex == monsters.Count - 1)
+            {
+                _targetId = monsters.First().Id;
+            }
+            else
+            {
+                _targetId = monsters[currentIndex + 1].Id;
             }
         }
     }

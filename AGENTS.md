@@ -26,6 +26,11 @@ The solution is divided into three main projects:
 - **Game Loop**: The server runs a `BackgroundService` (`GameLoopService`) that ticks every 500ms.
 - **Movement Queuing**: Players can queue up to 5 moves. The server processes one move per tick. Queued paths are rendered with transparency.
 - **Snapshots**: The server broadcasts a `WorldSnapshot` to all clients every tick.
+- **Combat System**:
+  - **Entities**: `Player` generalized to `Entity` with `Health`, `MaxHealth`, and `EntityType` (Player, Monster).
+  - **Melee**: "Bump" combat triggers when moving into a monster's tile.
+  - **Ranged**: `Tab` to cycle targets, `f` to perform a ranged attack.
+  - **Visuals**: Health bars and target reticles rendered in `game.js`.
 
 ## 🎨 Frontend & Rendering
 
@@ -69,6 +74,7 @@ When a task is completed and the user says "finalize", "close the task", or "I'm
 2. **Documentation**: Update `AGENTS.md` (or other relevant memory files) to reflect the new state of the project, including any new features, architectural changes, or roadmap progress.
 3. **Verification**: Ensure the project still builds and the todo list is cleared.
 4. **Completion**: Use the `todos` tool to clear the list and provide a concise summary of the final state.
+5. **Git Commit Draft**: Provide a concise (1-2 sentence) summary of the task's purpose and impact, suitable for a git commit message. Focus on "why" and "how" the goal was achieved, rather than listing specific code changes.
 
 ## 🗺 Roadmap (V0 Prototype)
 1. **Phase 1**: Project Scaffolding (Done)
@@ -77,4 +83,5 @@ When a task is completed and the user says "finalize", "close the task", or "I'm
 4. **Phase 4**: Rendering / PixiJS (Done)
 5. **Phase 5**: Movement Queuing (Done)
 6. **Phase 6**: Tileset Rendering (Done)
-7. **Phase 7**: Testing & Validation (Pending)
+7. **Phase 7**: Basic Combat System (Done)
+8. **Phase 8**: Testing & Validation (Pending)

@@ -30,4 +30,10 @@ public class GameHub : Hub
         _gameLoop.EnqueueInput(Context.ConnectionId, direction);
         await Task.CompletedTask;
     }
+
+    public async Task RangedAttack(string targetId)
+    {
+        _gameLoop.ProcessAttack(Context.ConnectionId, targetId);
+        await Task.CompletedTask;
+    }
 }

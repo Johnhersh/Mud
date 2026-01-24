@@ -10,16 +10,39 @@ public class GameLoopService : BackgroundService
     private readonly IHubContext<GameHub> _hubContext;
     private readonly ILogger<GameLoopService> _logger;
     
-    private readonly ConcurrentDictionary<string, Player> _players = new();
+    private readonly ConcurrentDictionary<string, Entity> _entities = new();
     private readonly ConcurrentDictionary<string, ConcurrentQueue<Direction>> _playerInputQueues = new();
     private readonly HashSet<Point> _walls = new();
     private long _tick = 0;
+    private const string MonsterId = "monster_1";
 
     public GameLoopService(IHubContext<GameHub> hubContext, ILogger<GameLoopService> logger)
     {
         _hubContext = hubContext;
         _logger = logger;
         GenerateInitialWalls();
+        SpawnMonster();
+    }
+
+    private void SpawnMonster()
+    {
+        var random = new Random();
+        Point pos;
+        do
+        {
+            pos = new Point(random.Next(-20, 20), random.Next(-20, 20));
+        } while (_walls.Contains(pos));
+
+        var monster = new Entity
+        {
+            Id = MonsterId,
+            Name = "Goblin",
+            Position = pos,
+            Type = EntityType.Monster,
+            Health = 50,
+            MaxHealth = 50
+        };
+        _entities.TryAdd(MonsterId, monster);
     }
 
     private void GenerateInitialWalls()
@@ -33,12 +56,20 @@ public class GameLoopService : BackgroundService
 
     public void AddPlayer(string id, string name)
     {
-        _players.TryAdd(id, new Player { Id = id, Name = name, Position = new Point(0, 0) });
+        _entities.TryAdd(id, new Entity 
+        { 
+            Id = id, 
+            Name = name, 
+            Position = new Point(0, 0),
+            Type = EntityType.Player,
+            Health = 100,
+            MaxHealth = 100
+        });
     }
 
     public void RemovePlayer(string id)
     {
-        _players.TryRemove(id, out _);
+        _entities.TryRemove(id, out _);
     }
 
     public void EnqueueInput(string playerId, Direction direction)
@@ -72,14 +103,16 @@ public class GameLoopService : BackgroundService
 
     private void Update()
     {
-        foreach (var playerId in _players.Keys)
+        var players = _entities.Values.Where(e => e.Type == EntityType.Player).ToList();
+        foreach (var playerEntity in players)
         {
+            var playerId = playerEntity.Id;
             if (!_playerInputQueues.TryGetValue(playerId, out var queue) || !queue.TryDequeue(out var direction))
             {
                 continue;
             }
 
-            if (_players.TryGetValue(playerId, out var player))
+            if (_entities.TryGetValue(playerId, out var player))
             {
                 var newPos = direction switch
                 {
@@ -89,6 +122,17 @@ public class GameLoopService : BackgroundService
                     Direction.Right => player.Position with { X = player.Position.X + 1 },
                     _ => player.Position
                 };
+
+                // Check for monster at destination
+                var target = _entities.Values.FirstOrDefault(e => e.Position == newPos && e.Type == EntityType.Monster);
+                if (target != null)
+                {
+                    ProcessAttack(playerId, target.Id);
+                    // Clear queue on attack
+                    while (queue.TryDequeue(out _)) ;
+                    _entities[playerId] = player with { QueuedPath = new List<Point>() };
+                    continue;
+                }
 
                 if (!_walls.Contains(newPos))
                 {
@@ -107,10 +151,13 @@ public class GameLoopService : BackgroundService
                         };
                         
                         if (_walls.Contains(currentPos)) break;
+                        // Also break if there's a monster
+                        if (_entities.Values.Any(e => e.Position == currentPos && e.Type == EntityType.Monster)) break;
+
                         queuedPath.Add(currentPos);
                     }
 
-                    _players[playerId] = player with 
+                    _entities[playerId] = player with 
                     { 
                         Position = newPos,
                         QueuedPath = queuedPath
@@ -120,9 +167,37 @@ public class GameLoopService : BackgroundService
                 {
                     // Blocked: clear the queue
                     while (queue.TryDequeue(out _)) ;
-                    _players[playerId] = player with { QueuedPath = new List<Point>() };
+                    _entities[playerId] = player with { QueuedPath = new List<Point>() };
                 }
             }
+        }
+    }
+
+    public void ProcessAttack(string attackerId, string targetId)
+    {
+        if (!_entities.TryGetValue(attackerId, out var attacker) || !_entities.TryGetValue(targetId, out var target))
+            return;
+
+        int damage = 10;
+        var newTarget = target with { Health = target.Health - damage };
+
+        if (newTarget.Health <= 0)
+        {
+            // Respawn monster
+            var random = new Random();
+            Point pos;
+            do
+            {
+                pos = new Point(random.Next(-20, 20), random.Next(-20, 20));
+            } while (_walls.Contains(pos) || _entities.Values.Any(e => e.Position == pos));
+
+            _entities[targetId] = newTarget with { Health = target.MaxHealth, Position = pos };
+            _logger.LogInformation("Entity {TargetId} died and respawned at {Pos}", targetId, pos);
+        }
+        else
+        {
+            _entities[targetId] = newTarget;
+            _logger.LogInformation("Entity {AttackerId} attacked {TargetId} for {Damage} damage. Health: {Health}", attackerId, targetId, damage, newTarget.Health);
         }
     }
 
@@ -131,7 +206,7 @@ public class GameLoopService : BackgroundService
         var snapshot = new WorldSnapshot
         {
             Tick = _tick,
-            Players = _players.Values.ToList(),
+            Entities = _entities.Values.ToList(),
             Walls = _walls.ToList()
         };
 
