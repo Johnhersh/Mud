@@ -40,8 +40,9 @@ public static class WorldConfig
     public const float CampInfluenceRadius = 5f;
     public const float ExitInfluenceRadius = 3f;
 
-    // River generation
+    // River generation - higher costs make river avoid that terrain
     public const int RiverCostWater = 1;
-    public const int RiverCostPlains = 5;
-    public const int RiverCostForest = 10;
+    public const int RiverCostPlains = 3;
+    public const int RiverCostForest = 500;  // Very high to avoid cutting through forests
+    public const int RiverNoiseScale = 5;    // Random variation to create meandering
 }

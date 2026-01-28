@@ -24,8 +24,8 @@ public static class RiverCarver
         Point start = GetEdgePoint(startEdge, biomes.Width, biomes.Height, random);
         Point end = GetEdgePoint(endEdge, biomes.Width, biomes.Height, random);
 
-        // Build weighted grid for AStarLite (lower cost = preferred)
-        var grid = new WorldGrid(BuildWeightedGrid(biomes.Biomes, totalWidth, totalHeight));
+        // Build weighted grid with noise for natural meandering
+        var grid = new WorldGrid(BuildWeightedGrid(biomes.Biomes, biomes.Noise, totalWidth, totalHeight));
         var pathfinder = new PathFinder(grid, new PathFinderOptions { Weighting = Weighting.Negative });
 
         var path = pathfinder.FindPath(
@@ -50,9 +50,10 @@ public static class RiverCarver
     }
 
     /// <summary>
-    /// Build a weighted grid where lower values are preferred paths
+    /// Build a weighted grid where lower values are preferred paths.
+    /// Rivers prefer lower-noise plains (sparse grass) and avoid forests.
     /// </summary>
-    private static short[,] BuildWeightedGrid(BiomeType[,] biomes, int width, int height)
+    private static short[,] BuildWeightedGrid(BiomeType[,] biomes, float[,] noise, int width, int height)
     {
         var grid = new short[width, height];
 
@@ -60,7 +61,25 @@ public static class RiverCarver
         {
             for (int y = 0; y < height; y++)
             {
-                grid[x, y] = GetMoveCost(biomes[x, y]);
+                var biome = biomes[x, y];
+                var noiseValue = noise[x, y];
+
+                int cost = biome switch
+                {
+                    // Water is always cheapest
+                    BiomeType.Water => WorldConfig.RiverCostWater,
+
+                    // Plains cost scales with noise - lower noise (sparse grass) is cheaper
+                    // This makes rivers naturally follow lower terrain / sparse areas
+                    BiomeType.Plains => WorldConfig.RiverCostPlains + (int)(noiseValue * WorldConfig.RiverNoiseScale),
+
+                    // Forest is very expensive to cut through
+                    BiomeType.Forest => WorldConfig.RiverCostForest,
+
+                    _ => WorldConfig.RiverCostPlains
+                };
+
+                grid[x, y] = (short)cost;
             }
         }
 
