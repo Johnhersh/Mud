@@ -50,6 +50,64 @@ The solution is divided into three main projects:
   - `GameLoopService` is registered as a Singleton and a HostedService in the server.
   - `GameClient` is registered as a Scoped service in the client.
 
+## 🎯 Code Style Preferences
+
+### Pipeline Pattern
+Prefer fluent pipelines that transform data through discrete stages:
+```csharp
+return new Input(params)
+    .StepOne()
+    .StepTwo()
+    .StepThree()
+    .ToResult();
+```
+- Each stage returns a new type carrying data needed by subsequent stages
+- Keep creation logic inside pipeline steps, not passed in from outside
+- Avoid intermediate variables when a single chain suffices
+
+### Strongly-Typed Identifiers
+Use wrapper types for IDs to prevent mixing up different identifier types:
+```csharp
+public readonly record struct PlayerId(string Value);
+```
+- Wrap raw strings at system boundaries (e.g., SignalR `ConnectionId` → `PlayerId`)
+- Use `.Value` when interfacing with external systems that need the raw string
+
+### Switch Expressions
+Prefer switch expressions over if-chains. Use `when` guards for runtime values:
+```csharp
+// Compile-time constants - use relational patterns
+value switch
+{
+    < Threshold1 => Result.A,
+    < Threshold2 => Result.B,
+    _ => Result.C
+};
+
+// Runtime values - use when guards
+value switch
+{
+    < Threshold1 => Result.A,
+    var v when v < runtimeThreshold => Result.B,
+    _ => Result.C
+};
+```
+
+### Naming Over Overloading
+Prefer distinct method names over overloads when behavior differs:
+```csharp
+// Good: Clear intent
+ToBiomes()              // Uses default thresholds
+ToBiomesWithDensity()   // Custom density for instances
+
+// Avoid: Ambiguous overloads
+ToBiomes()
+ToBiomes(float, float)
+```
+
+### CSS Isolation
+Use Blazor CSS isolation (`Component.razor.css`) instead of inline styles or global CSS.
+
 ## ⚠️ Gotchas & Patterns
 
 - **Coordinate System**: The game uses a tile-based coordinate system. Rendering in `game.js` offsets coordinates by `+400` (X) and `+300` (Y) to center the (0,0) position on an 800x600 canvas.
@@ -59,11 +117,7 @@ The solution is divided into three main projects:
 
 ## 📋 Task Planning & Implementation
 
-When the user says they want to plan a new task, or when planning or starting a new task, follow the structured process defined in `.agent/TASK_PLANNING.md`:
-
-1.  **Phase 1: Product Definition**: Understand goals and scope without code exploration. Ask clarifying questions one at a time.
-2.  **Phase 2: Technical Specification**: After user approval, explore the codebase and draft a detailed task specification.
-3.  **Task Documents**: Finalize plans as `.md` files in the `.agent/tasks/` folder.
+When the user says they want to plan a new task, or when planning or starting a new task, follow the structured process defined in `.agent/TASK_PLANNING.md`. Read that document and follow it.
 
 When the user says to implement a task, look for it in this tasks folder.
 

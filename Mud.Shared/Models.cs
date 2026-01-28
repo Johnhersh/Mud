@@ -1,4 +1,5 @@
 using MessagePack;
+using Mud.Shared.World;
 
 namespace Mud.Shared;
 
@@ -40,13 +41,45 @@ public enum Direction
     Right
 }
 
+/// <summary>
+/// Strongly-typed player identifier (wraps SignalR connection ID).
+/// </summary>
+[MessagePackObject]
+public readonly record struct PlayerId([property: Key(0)] string Value)
+{
+    public override string ToString() => Value;
+}
+
 [MessagePackObject]
 public record WorldSnapshot
 {
     [Key(0)]
     public long Tick { get; init; }
+
     [Key(1)]
-    public List<Entity> Entities { get; init; } = new();
+    public string WorldId { get; init; } = string.Empty;
+
     [Key(2)]
-    public List<Point> Walls { get; init; } = new();
+    public WorldType WorldType { get; init; }
+
+    [Key(3)]
+    public List<Entity> Entities { get; init; } = new();
+
+    [Key(4)]
+    public List<TileData>? Tiles { get; init; }  // Flat array, row-major order (y * totalWidth + x)
+
+    [Key(5)]
+    public List<POI> POIs { get; init; } = new();
+
+    [Key(6)]
+    public Point? ExitMarker { get; init; }
+
+    [Key(7)]
+    public int Width { get; init; }
+
+    [Key(8)]
+    public int Height { get; init; }
+
+    [Key(9)]
+    public int GhostPadding { get; init; }
 }

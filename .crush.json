@@ -14,7 +14,7 @@
     "poe": {
       "id": "poe",
       "name": "Poe",
-      "type": "openai-compat",
+      "type": "openai",
       "base_url": "https://api.poe.com/v1",
       "api_key": "898P3VZl_2vy9tAxjiJUHxqgc1nxF0sHDACSE1KOUq4",
       "models": [
