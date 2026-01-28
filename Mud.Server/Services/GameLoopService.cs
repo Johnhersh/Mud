@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
 using Mud.Server.Hubs;
+using Mud.Server.World;
+using Mud.Server.World.Generation;
 using Mud.Shared;
+using Mud.Shared.World;
 
 namespace Mud.Server.Services;
 
@@ -9,75 +12,215 @@ public class GameLoopService : BackgroundService
 {
     private readonly IHubContext<GameHub> _hubContext;
     private readonly ILogger<GameLoopService> _logger;
-    
-    private readonly ConcurrentDictionary<string, Entity> _entities = new();
-    private readonly ConcurrentDictionary<string, ConcurrentQueue<Direction>> _playerInputQueues = new();
-    private readonly HashSet<Point> _walls = new();
+
+    // World management
+    private readonly ConcurrentDictionary<string, WorldState> _worlds = new();
+    private WorldState _overworld = null!;
+
+    // Player tracking
+    private readonly ConcurrentDictionary<PlayerId, PlayerState> _players = new();
+    private readonly ConcurrentDictionary<PlayerId, ConcurrentQueue<Direction>> _playerInputQueues = new();
+
     private long _tick = 0;
-    private const string MonsterId = "monster_1";
 
     public GameLoopService(IHubContext<GameHub> hubContext, ILogger<GameLoopService> logger)
     {
         _hubContext = hubContext;
         _logger = logger;
-        GenerateInitialWalls();
-        SpawnMonster();
+        InitializeWorld();
     }
 
-    private void SpawnMonster()
+    private void InitializeWorld()
     {
-        var random = new Random();
-        Point pos;
-        do
-        {
-            pos = new Point(random.Next(-20, 20), random.Next(-20, 20));
-        } while (_walls.Contains(pos));
-
-        var monster = new Entity
-        {
-            Id = MonsterId,
-            Name = "Goblin",
-            Position = pos,
-            Type = EntityType.Monster,
-            Health = 50,
-            MaxHealth = 50
-        };
-        _entities.TryAdd(MonsterId, monster);
+        _logger.LogInformation("Generating overworld with seed {Seed}...", WorldConfig.WorldSeed);
+        _overworld = WorldGenerator.GenerateOverworld(WorldConfig.WorldSeed);
+        _worlds[_overworld.Id] = _overworld;
+        _logger.LogInformation("Overworld generated: {Width}x{Height} with {POICount} POIs",
+            _overworld.Terrain.Width, _overworld.Terrain.Height, _overworld.POIs.Count);
     }
 
-    private void GenerateInitialWalls()
+    private void SpawnMonsters(WorldState world, int count)
     {
-        var random = new Random();
-        for (int i = 0; i < 50; i++)
+        var random = new Random(WorldConfig.WorldSeed);
+        for (int i = 0; i < count; i++)
         {
-            _walls.Add(new Point(random.Next(-20, 20), random.Next(-20, 20)));
+            var pos = world.FindRandomWalkablePosition(random);
+            if (pos == null) continue;
+
+            var monster = new Entity
+            {
+                Id = $"monster_{world.Id}_{i}",
+                Name = "Goblin",
+                Position = pos,
+                Type = EntityType.Monster,
+                Health = 50,
+                MaxHealth = 50
+            };
+            world.AddEntity(monster);
         }
     }
 
-    public void AddPlayer(string id, string name)
+    public void AddPlayer(PlayerId playerId, string name)
     {
-        _entities.TryAdd(id, new Entity 
-        { 
-            Id = id, 
-            Name = name, 
-            Position = new Point(0, 0),
+        // Spawn at town, or center of map if no town exists
+        var spawnTown = _overworld.POIs.FirstOrDefault(p => p.Type == POIType.Town);
+        var spawnPos = spawnTown?.Position ?? new Point(
+            WorldConfig.OverworldWidth / 2,
+            WorldConfig.OverworldHeight / 2
+        );
+
+        // Create player state
+        var playerState = new PlayerState
+        {
+            Id = playerId,
+            Name = name,
+            CurrentWorldId = _overworld.Id,
+            Position = spawnPos,
+            LastOverworldPosition = spawnPos
+        };
+        _players[playerId] = playerState;
+
+        // Create player entity in overworld
+        var entity = new Entity
+        {
+            Id = playerId.Value,
+            Name = name,
+            Position = spawnPos,
             Type = EntityType.Player,
             Health = 100,
             MaxHealth = 100
-        });
+        };
+        _overworld.AddEntity(entity);
+        _logger.LogInformation("Player {Name} joined at {Position}", name, spawnPos);
     }
 
-    public void RemovePlayer(string id)
+    public void RemovePlayer(PlayerId playerId)
     {
-        _entities.TryRemove(id, out _);
+        if (_players.TryRemove(playerId, out var playerState))
+        {
+            // Remove from current world
+            if (_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+            {
+                world.RemoveEntity(playerId.Value);
+
+                // Clean up instance if empty
+                if (world.Type == WorldType.Instance && !world.GetPlayers().Any())
+                {
+                    _worlds.TryRemove(world.Id, out _);
+                    _logger.LogInformation("Instance {WorldId} destroyed (empty)", world.Id);
+                }
+            }
+        }
+        _playerInputQueues.TryRemove(playerId, out _);
     }
 
-    public void EnqueueInput(string playerId, Direction direction)
+    public PlayerState? GetPlayer(PlayerId playerId)
+    {
+        return _players.TryGetValue(playerId, out var player) ? player : null;
+    }
+
+    public WorldState? GetWorld(string worldId)
+    {
+        return _worlds.TryGetValue(worldId, out var world) ? world : null;
+    }
+
+    public void EnqueueInput(PlayerId playerId, Direction direction)
     {
         var queue = _playerInputQueues.GetOrAdd(playerId, _ => new ConcurrentQueue<Direction>());
         if (queue.Count < 5)
         {
             queue.Enqueue(direction);
+        }
+    }
+
+    public void Interact(PlayerId playerId)
+    {
+        if (!_players.TryGetValue(playerId, out var playerState))
+            return;
+
+        if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+            return;
+
+        var entity = world.GetEntity(playerId.Value);
+        if (entity == null) return;
+
+        if (world.Type == WorldType.Overworld)
+        {
+            // Check for POI
+            var poi = world.GetPOIAt(entity.Position);
+            if (poi != null)
+            {
+                EnterInstance(playerState, poi, world, entity);
+            }
+        }
+        else // Instance
+        {
+            // Check for exit
+            if (world.IsExitMarker(entity.Position))
+            {
+                ExitInstance(playerState, world, entity);
+            }
+        }
+    }
+
+    private void EnterInstance(PlayerState playerState, POI poi, WorldState overworld, Entity entity)
+    {
+        string instanceId = $"instance_{poi.Id}";
+
+        // Get or create instance
+        if (!_worlds.TryGetValue(instanceId, out var instance))
+        {
+            instance = WorldGenerator.GenerateInstance(poi, overworld.Terrain, WorldConfig.WorldSeed);
+            _worlds[instanceId] = instance;
+
+            SpawnMonsters(instance, 3);
+            _logger.LogInformation("Instance {InstanceId} created for POI {POIId}", instanceId, poi.Id);
+        }
+
+        // Find spawn position in instance
+        var random = new Random();
+        var spawnPos = instance.FindRandomWalkablePosition(random) ?? new Point(
+            WorldConfig.InstanceWidth / 2,
+            WorldConfig.InstanceHeight / 2
+        );
+
+        // Save overworld position
+        playerState.SaveOverworldPosition();
+
+        // Remove from overworld
+        overworld.RemoveEntity(playerState.Id.Value);
+
+        // Add to instance
+        var newEntity = entity with { Position = spawnPos, QueuedPath = new List<Point>() };
+        instance.AddEntity(newEntity);
+
+        // Update player state
+        playerState.TransferToWorld(instanceId, spawnPos);
+        _logger.LogInformation("Player {PlayerId} entered instance {InstanceId}", playerState.Id, instanceId);
+    }
+
+    private void ExitInstance(PlayerState playerState, WorldState instance, Entity entity)
+    {
+        // Remove from instance
+        instance.RemoveEntity(playerState.Id.Value);
+
+        // Add back to overworld
+        var newEntity = entity with
+        {
+            Position = playerState.LastOverworldPosition,
+            QueuedPath = new List<Point>()
+        };
+        _overworld.AddEntity(newEntity);
+
+        // Update player state
+        playerState.TransferToWorld(_overworld.Id, playerState.LastOverworldPosition);
+        _logger.LogInformation("Player {PlayerId} exited to overworld", playerState.Id);
+
+        // Clean up instance if empty
+        if (!instance.GetPlayers().Any())
+        {
+            _worlds.TryRemove(instance.Id, out _);
+            _logger.LogInformation("Instance {InstanceId} destroyed (empty)", instance.Id);
         }
     }
 
@@ -93,7 +236,7 @@ public class GameLoopService : BackgroundService
             _tick++;
 
             var elapsed = DateTime.UtcNow - startTime;
-            var delay = TimeSpan.FromMilliseconds(500) - elapsed;
+            var delay = TimeSpan.FromMilliseconds(300) - elapsed;
             if (delay > TimeSpan.Zero)
             {
                 await Task.Delay(delay, stoppingToken);
@@ -103,80 +246,96 @@ public class GameLoopService : BackgroundService
 
     private void Update()
     {
-        var players = _entities.Values.Where(e => e.Type == EntityType.Player).ToList();
+        // Process each world
+        foreach (var world in _worlds.Values)
+        {
+            UpdateWorld(world);
+        }
+    }
+
+    private void UpdateWorld(WorldState world)
+    {
+        var players = world.GetPlayers().ToList();
         foreach (var playerEntity in players)
         {
-            var playerId = playerEntity.Id;
+            var playerId = new PlayerId(playerEntity.Id);
             if (!_playerInputQueues.TryGetValue(playerId, out var queue) || !queue.TryDequeue(out var direction))
             {
                 continue;
             }
 
-            if (_entities.TryGetValue(playerId, out var player))
+            var player = world.GetEntity(playerEntity.Id);
+            if (player == null) continue;
+
+            var newPos = direction switch
             {
-                var newPos = direction switch
-                {
-                    Direction.Up => player.Position with { Y = player.Position.Y - 1 },
-                    Direction.Down => player.Position with { Y = player.Position.Y + 1 },
-                    Direction.Left => player.Position with { X = player.Position.X - 1 },
-                    Direction.Right => player.Position with { X = player.Position.X + 1 },
-                    _ => player.Position
-                };
+                Direction.Up => player.Position with { Y = player.Position.Y - 1 },
+                Direction.Down => player.Position with { Y = player.Position.Y + 1 },
+                Direction.Left => player.Position with { X = player.Position.X - 1 },
+                Direction.Right => player.Position with { X = player.Position.X + 1 },
+                _ => player.Position
+            };
 
-                // Check for monster at destination
-                var target = _entities.Values.FirstOrDefault(e => e.Position == newPos && e.Type == EntityType.Monster);
-                if (target != null)
-                {
-                    ProcessAttack(playerId, target.Id);
-                    // Clear queue on attack
-                    while (queue.TryDequeue(out _)) ;
-                    _entities[playerId] = player with { QueuedPath = new List<Point>() };
-                    continue;
-                }
+            // Check for monster at destination
+            var target = world.Entities.Values.FirstOrDefault(e => e.Position == newPos && e.Type == EntityType.Monster);
+            if (target != null)
+            {
+                ProcessAttack(world, playerEntity.Id, target.Id);
+                // Clear queue on attack
+                while (queue.TryDequeue(out _)) ;
+                world.UpdateEntity(player with { QueuedPath = new List<Point>() });
+                continue;
+            }
 
-                if (!_walls.Contains(newPos))
+            if (world.IsWalkable(newPos))
+            {
+                // Update position and recalculate queued path for the client
+                var currentPos = newPos;
+                var queuedPath = new List<Point>();
+                foreach (var queuedDir in queue)
                 {
-                    // Update position and recalculate queued path for the client
-                    var currentPos = newPos;
-                    var queuedPath = new List<Point>();
-                    foreach (var queuedDir in queue)
+                    currentPos = queuedDir switch
                     {
-                        currentPos = queuedDir switch
-                        {
-                            Direction.Up => currentPos with { Y = currentPos.Y - 1 },
-                            Direction.Down => currentPos with { Y = currentPos.Y + 1 },
-                            Direction.Left => currentPos with { X = currentPos.X - 1 },
-                            Direction.Right => currentPos with { X = currentPos.X + 1 },
-                            _ => currentPos
-                        };
-                        
-                        if (_walls.Contains(currentPos)) break;
-                        // Also break if there's a monster
-                        if (_entities.Values.Any(e => e.Position == currentPos && e.Type == EntityType.Monster)) break;
-
-                        queuedPath.Add(currentPos);
-                    }
-
-                    _entities[playerId] = player with 
-                    { 
-                        Position = newPos,
-                        QueuedPath = queuedPath
+                        Direction.Up => currentPos with { Y = currentPos.Y - 1 },
+                        Direction.Down => currentPos with { Y = currentPos.Y + 1 },
+                        Direction.Left => currentPos with { X = currentPos.X - 1 },
+                        Direction.Right => currentPos with { X = currentPos.X + 1 },
+                        _ => currentPos
                     };
+
+                    if (!world.IsWalkable(currentPos)) break;
+                    // Also break if there's a monster
+                    if (world.Entities.Values.Any(e => e.Position == currentPos && e.Type == EntityType.Monster)) break;
+
+                    queuedPath.Add(currentPos);
                 }
-                else
+
+                world.UpdateEntity(player with
                 {
-                    // Blocked: clear the queue
-                    while (queue.TryDequeue(out _)) ;
-                    _entities[playerId] = player with { QueuedPath = new List<Point>() };
+                    Position = newPos,
+                    QueuedPath = queuedPath
+                });
+
+                // Update player state position
+                if (_players.TryGetValue(playerId, out var pState))
+                {
+                    pState.Position = newPos;
                 }
+            }
+            else
+            {
+                // Blocked: clear the queue
+                while (queue.TryDequeue(out _)) ;
+                world.UpdateEntity(player with { QueuedPath = new List<Point>() });
             }
         }
     }
 
-    public void ProcessAttack(string attackerId, string targetId)
+    public void ProcessAttack(WorldState world, string attackerId, string targetId)
     {
-        if (!_entities.TryGetValue(attackerId, out var attacker) || !_entities.TryGetValue(targetId, out var target))
-            return;
+        var attacker = world.GetEntity(attackerId);
+        var target = world.GetEntity(targetId);
+        if (attacker == null || target == null) return;
 
         int damage = 10;
         var newTarget = target with { Health = target.Health - damage };
@@ -185,31 +344,73 @@ public class GameLoopService : BackgroundService
         {
             // Respawn monster
             var random = new Random();
-            Point pos;
-            do
+            var pos = world.FindRandomWalkablePosition(random);
+            if (pos != null)
             {
-                pos = new Point(random.Next(-20, 20), random.Next(-20, 20));
-            } while (_walls.Contains(pos) || _entities.Values.Any(e => e.Position == pos));
-
-            _entities[targetId] = newTarget with { Health = target.MaxHealth, Position = pos };
-            _logger.LogInformation("Entity {TargetId} died and respawned at {Pos}", targetId, pos);
+                world.UpdateEntity(newTarget with { Health = target.MaxHealth, Position = pos });
+                _logger.LogInformation("Entity {TargetId} died and respawned at {Pos}", targetId, pos);
+            }
+            else
+            {
+                world.RemoveEntity(targetId);
+                _logger.LogInformation("Entity {TargetId} died (no spawn position)", targetId);
+            }
         }
         else
         {
-            _entities[targetId] = newTarget;
-            _logger.LogInformation("Entity {AttackerId} attacked {TargetId} for {Damage} damage. Health: {Health}", attackerId, targetId, damage, newTarget.Health);
+            world.UpdateEntity(newTarget);
+            _logger.LogInformation("Entity {AttackerId} attacked {TargetId} for {Damage} damage. Health: {Health}",
+                attackerId, targetId, damage, newTarget.Health);
         }
+    }
+
+    public void ProcessRangedAttack(PlayerId attackerId, string targetId)
+    {
+        // Find player's current world
+        if (!_players.TryGetValue(attackerId, out var playerState))
+            return;
+
+        if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+            return;
+
+        ProcessAttack(world, attackerId.Value, targetId);
     }
 
     private async Task Broadcast()
     {
-        var snapshot = new WorldSnapshot
-        {
-            Tick = _tick,
-            Entities = _entities.Values.ToList(),
-            Walls = _walls.ToList()
-        };
+        // Group players by world and send world-specific snapshots
+        var playersByWorld = _players.Values
+            .GroupBy(p => p.CurrentWorldId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        await _hubContext.Clients.All.SendAsync("OnWorldUpdate", snapshot);
+        foreach (var (worldId, players) in playersByWorld)
+        {
+            if (!_worlds.TryGetValue(worldId, out var world)) continue;
+
+            // Create snapshot without tiles (for players who already have them)
+            var snapshotWithoutTiles = world.ToSnapshot(_tick, includeTiles: false);
+            // Create snapshot with tiles (for players who need them)
+            WorldSnapshot? snapshotWithTiles = null;
+
+            foreach (var playerState in players)
+            {
+                // Only include tiles if this is a new world for the player
+                bool needsTiles = playerState.LastSentTilesWorldId != worldId;
+
+                if (needsTiles)
+                {
+                    // Lazily create the full snapshot only if needed
+                    snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true);
+                    _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
+                        playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
+                    playerState.LastSentTilesWorldId = worldId;
+                    await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithTiles);
+                }
+                else
+                {
+                    await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithoutTiles);
+                }
+            }
+        }
     }
 }

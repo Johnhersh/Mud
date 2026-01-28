@@ -1,0 +1,98 @@
+using AStar;
+using AStar.Options;
+using Mud.Shared;
+using Mud.Shared.World;
+
+namespace Mud.Server.World.Generation;
+
+/// <summary>
+/// Carves rivers through terrain using A* pathfinding
+/// </summary>
+public static class RiverCarver
+{
+    /// <summary>
+    /// Carve a river from one edge to another
+    /// </summary>
+    public static BiomeMap CarveRivers(this BiomeMap biomes, Edge startEdge, Edge endEdge, int? seed = null)
+    {
+        var random = new Random(seed ?? biomes.Seed);
+
+        int totalWidth = biomes.Biomes.GetLength(0);
+        int totalHeight = biomes.Biomes.GetLength(1);
+        int ghostPadding = biomes.GhostPadding;
+
+        Point start = GetEdgePoint(startEdge, biomes.Width, biomes.Height, random);
+        Point end = GetEdgePoint(endEdge, biomes.Width, biomes.Height, random);
+
+        // Build weighted grid for AStarLite (lower cost = preferred)
+        var grid = new WorldGrid(BuildWeightedGrid(biomes.Biomes, totalWidth, totalHeight));
+        var pathfinder = new PathFinder(grid, new PathFinderOptions { Weighting = Weighting.Negative });
+
+        var path = pathfinder.FindPath(
+            new Position(start.X + ghostPadding, start.Y + ghostPadding),
+            new Position(end.X + ghostPadding, end.Y + ghostPadding)
+        );
+
+        if (path == null || path.Length == 0)
+            return biomes;
+
+        var newBiomes = (BiomeType[,])biomes.Biomes.Clone();
+
+        foreach (var pos in path)
+        {
+            if (pos.Row >= 0 && pos.Row < totalWidth && pos.Column >= 0 && pos.Column < totalHeight)
+            {
+                newBiomes[pos.Row, pos.Column] = BiomeType.Water;
+            }
+        }
+
+        return new BiomeMap(newBiomes, biomes.Noise, biomes.Width, biomes.Height, biomes.Seed, ghostPadding);
+    }
+
+    /// <summary>
+    /// Build a weighted grid where lower values are preferred paths
+    /// </summary>
+    private static short[,] BuildWeightedGrid(BiomeType[,] biomes, int width, int height)
+    {
+        var grid = new short[width, height];
+
+        for (int x = 0; x < width; x++)
+        {
+            for (int y = 0; y < height; y++)
+            {
+                grid[x, y] = GetMoveCost(biomes[x, y]);
+            }
+        }
+
+        return grid;
+    }
+
+    /// <summary>
+    /// Get movement cost for traversing a biome type (lower = preferred)
+    /// </summary>
+    private static short GetMoveCost(BiomeType biome)
+    {
+        return biome switch
+        {
+            BiomeType.Water => (short)WorldConfig.RiverCostWater,
+            BiomeType.Plains => (short)WorldConfig.RiverCostPlains,
+            BiomeType.Forest => (short)WorldConfig.RiverCostForest,
+            _ => (short)WorldConfig.RiverCostPlains
+        };
+    }
+
+    /// <summary>
+    /// Get a random point on the specified edge
+    /// </summary>
+    private static Point GetEdgePoint(Edge edge, int width, int height, Random random)
+    {
+        return edge switch
+        {
+            Edge.North => new Point(random.Next(width), 0),
+            Edge.South => new Point(random.Next(width), height - 1),
+            Edge.West => new Point(0, random.Next(height)),
+            Edge.East => new Point(width - 1, random.Next(height)),
+            _ => new Point(0, 0)
+        };
+    }
+}

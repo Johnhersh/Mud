@@ -8,32 +8,28 @@ public class GameHub : Hub
 {
     private readonly GameLoopService _gameLoop;
 
+    private PlayerId PlayerId => new(Context.ConnectionId);
+
     public GameHub(GameLoopService gameLoop)
     {
         _gameLoop = gameLoop;
     }
 
-    public async Task Join(string name)
+    public void Join(string name) =>
+        _gameLoop.AddPlayer(PlayerId, name);
+
+    public override Task OnDisconnectedAsync(Exception? exception)
     {
-        _gameLoop.AddPlayer(Context.ConnectionId, name);
-        await Task.CompletedTask;
+        _gameLoop.RemovePlayer(PlayerId);
+        return base.OnDisconnectedAsync(exception);
     }
 
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        _gameLoop.RemovePlayer(Context.ConnectionId);
-        await base.OnDisconnectedAsync(exception);
-    }
+    public void Move(Direction direction) =>
+        _gameLoop.EnqueueInput(PlayerId, direction);
 
-    public async Task Move(Direction direction)
-    {
-        _gameLoop.EnqueueInput(Context.ConnectionId, direction);
-        await Task.CompletedTask;
-    }
+    public void RangedAttack(string targetId) =>
+        _gameLoop.ProcessRangedAttack(PlayerId, targetId);
 
-    public async Task RangedAttack(string targetId)
-    {
-        _gameLoop.ProcessAttack(Context.ConnectionId, targetId);
-        await Task.CompletedTask;
-    }
+    public void Interact() =>
+        _gameLoop.Interact(PlayerId);
 }

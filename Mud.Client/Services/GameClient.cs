@@ -45,6 +45,11 @@ public class GameClient : IAsyncDisposable
         await _hubConnection.SendAsync("RangedAttack", targetId);
     }
 
+    public async Task InteractAsync()
+    {
+        await _hubConnection.SendAsync("Interact");
+    }
+
     public async ValueTask DisposeAsync()
     {
         await _hubConnection.DisposeAsync();

@@ -2,10 +2,15 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/dotnet
 {
 	"name": "C# (.NET)",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
 	"features": {
-		"ghcr.io/devcontainers/features/node:1": {}
+		"ghcr.io/devcontainers/features/node:1": {},
+		"ghcr.io/schlich/devcontainer-features/playwright:0": {
+			"version": "latest",
+			"install-deps": true
+		}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [5000, 5001],
@@ -15,7 +20,15 @@
 	//		}
 	// }
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "npm install -g @charmland/crush"
+	"postCreateCommand": "npm install -g @charmland/crush opencode-ai@latest && curl -fsSL https://claude.ai/install.sh | bash",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"sst-dev.opencode",
+				"ms-dotnettools.csdevkit"
+			]
+		}
+	}
 	// Configure tool-specific properties.
 	// "customizations": {},
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
