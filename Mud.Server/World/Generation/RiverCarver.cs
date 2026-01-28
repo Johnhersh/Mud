@@ -40,9 +40,14 @@ public static class RiverCarver
 
         foreach (var pos in path)
         {
+            // Make river 2 tiles wide by also setting the tile to the right
             if (pos.Row >= 0 && pos.Row < totalWidth && pos.Column >= 0 && pos.Column < totalHeight)
             {
                 newBiomes[pos.Row, pos.Column] = BiomeType.Water;
+            }
+            if (pos.Row + 1 >= 0 && pos.Row + 1 < totalWidth && pos.Column >= 0 && pos.Column < totalHeight)
+            {
+                newBiomes[pos.Row + 1, pos.Column] = BiomeType.Water;
             }
         }
 
