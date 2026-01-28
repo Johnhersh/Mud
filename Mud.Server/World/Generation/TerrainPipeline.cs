@@ -149,8 +149,8 @@ public static class TerrainPipeline
 
         return normalized switch
         {
-            < 0.33f => TileType.TreeSparse,
-            < 0.66f => TileType.TreeMedium,
+            < 0.15f => TileType.TreeSparse,
+            < 0.40f => TileType.TreeMedium,
             _ => TileType.TreeDense
         };
     }
