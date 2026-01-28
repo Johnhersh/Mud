@@ -18,6 +18,7 @@ public static class WorldGenerator
             .CarveRivers(Edge.North, Edge.South, seed)
             .PlacePOIs()
             .ToTileMap()
+            .PlaceBridges()
             .ApplyGrassDensity()
             .ToWorldState("overworld", WorldType.Overworld);
 

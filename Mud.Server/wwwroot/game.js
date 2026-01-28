@@ -41,12 +41,13 @@ const TileType = {
     GrassMedium: 1,
     GrassDense: 2,
     Water: 3,
-    TreeSparse: 4,
-    TreeMedium: 5,
-    TreeDense: 6,
-    POIMarker: 7,
-    ExitMarker: 8,
-    TownCenter: 9
+    Bridge: 4,
+    TreeSparse: 5,
+    TreeMedium: 6,
+    TreeDense: 7,
+    POIMarker: 8,
+    ExitMarker: 9,
+    TownCenter: 10
 };
 
 // Tile textures mapping (tileset grid coordinates)
@@ -55,6 +56,7 @@ const TILE_TEXTURES = {
     [TileType.GrassMedium]: { x: 6, y: 0, tint: 0x228B22 },   // Medium grass (♠)
     [TileType.GrassDense]: { x: 7, y: 0, tint: 0x228B22 },    // Dense grass (•)
     [TileType.Water]: { x: 8, y: 5, tint: 0xFFFFFF },         // Water - light blue block
+    [TileType.Bridge]: { x: 6, y: 5, tint: 0xFFFFFF },        // Bridge (6th row, 7th tile)
     [TileType.TreeSparse]: { x: 1, y: 1, tint: 0xFFFFFF },    // Single tree (2nd slot)
     [TileType.TreeMedium]: { x: 2, y: 1, tint: 0xFFFFFF },    // Medium tree (3rd slot)
     [TileType.TreeDense]: { x: 3, y: 1, tint: 0xFFFFFF },     // Double tree (4th slot)

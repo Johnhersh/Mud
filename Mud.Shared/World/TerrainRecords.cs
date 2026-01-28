@@ -21,6 +21,7 @@ public enum TileType
     GrassMedium,
     GrassDense,
     Water,
+    Bridge,
     TreeSparse,
     TreeMedium,
     TreeDense,
