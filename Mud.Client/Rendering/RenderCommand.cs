@@ -77,7 +77,8 @@ public record SetTerrainCommand(
     List<TileRenderData> Tiles,
     int Width,
     int Height,
-    int GhostPadding
+    int GhostPadding,
+    bool IsInstance
 ) : RenderCommand("SetTerrain", null);
 
 /// <summary>

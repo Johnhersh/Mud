@@ -65,7 +65,8 @@ public class GameRenderer
                 tileRenderData,
                 snapshot.Width,
                 snapshot.Height,
-                snapshot.GhostPadding
+                snapshot.GhostPadding,
+                isInstance: snapshot.WorldType == WorldType.Instance
             );
 
             // Clear static sprites from old world (POIs, exit markers)

@@ -69,9 +69,9 @@ public class RenderCommandBuffer
         return this;
     }
 
-    public RenderCommandBuffer SetTerrain(string worldId, List<TileRenderData> tiles, int width, int height, int ghostPadding)
+    public RenderCommandBuffer SetTerrain(string worldId, List<TileRenderData> tiles, int width, int height, int ghostPadding, bool isInstance)
     {
-        _commands.Add(new SetTerrainCommand(worldId, tiles, width, height, ghostPadding));
+        _commands.Add(new SetTerrainCommand(worldId, tiles, width, height, ghostPadding, isInstance));
         return this;
     }
 

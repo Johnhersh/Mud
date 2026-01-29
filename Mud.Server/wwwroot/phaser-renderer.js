@@ -6,7 +6,16 @@ const entities = new Map();      // entityId -> Phaser.GameObjects.Sprite
 const healthBars = new Map();    // entityId -> { bg, fg, maxHealth, width }
 const queuedPaths = new Map();   // entityId -> Phaser.GameObjects.Graphics[]
 let targetReticle = null;
-let terrainContainer = null;
+
+// Terrain sprite pools - pre-allocated at startup for instant world transitions
+let overworldContainer = null;
+let instanceContainer = null;
+let overworldSprites = [];       // 190x190 = 36,100 sprites (150 + 2*20 ghost padding)
+let instanceSprites = [];        // 60x60 = 3,600 sprites (50 + 2*5 ghost padding)
+
+// World size constants (must match server WorldConfig)
+const OVERWORLD_TOTAL = 190;     // 150 + 2*20
+const INSTANCE_TOTAL = 60;       // 50 + 2*5
 
 // Constants
 const TILE_SIZE = 20;
@@ -79,12 +88,22 @@ function create() {
     console.log('Phaser create starting');
     mainScene = this;
 
-    // Create layer containers (depth ordering)
-    terrainContainer = this.add.container(0, 0);
-    terrainContainer.setDepth(0);
-
     // Enable pixel-perfect camera to prevent gaps between tiles
     this.cameras.main.setRoundPixels(true);
+
+    // Pre-allocate terrain sprite pools for instant world transitions.
+    // Creating sprites is expensive, but updating their properties is cheap.
+    // By allocating all sprites at startup, world transitions become instant.
+    overworldContainer = this.add.container(0, 0);
+    overworldContainer.setDepth(0);
+    overworldSprites = createTerrainPool(OVERWORLD_TOTAL * OVERWORLD_TOTAL, overworldContainer);
+    console.log(`Pre-allocated ${overworldSprites.length} overworld terrain sprites`);
+
+    instanceContainer = this.add.container(0, 0);
+    instanceContainer.setDepth(0);
+    instanceContainer.setVisible(false);
+    instanceSprites = createTerrainPool(INSTANCE_TOTAL * INSTANCE_TOTAL, instanceContainer);
+    console.log(`Pre-allocated ${instanceSprites.length} instance terrain sprites`);
 
     console.log('Phaser scene created and ready');
 
@@ -93,6 +112,19 @@ function create() {
         initResolve();
         initResolve = null;
     }
+}
+
+function createTerrainPool(count, container) {
+    const sprites = [];
+    for (let i = 0; i < count; i++) {
+        const sprite = mainScene.add.sprite(0, 0, 'tileset', 0);
+        sprite.setOrigin(0, 0);
+        sprite.setDisplaySize(TILE_SIZE, TILE_SIZE);
+        sprite.setVisible(false);
+        container.add(sprite);
+        sprites.push(sprite);
+    }
+    return sprites;
 }
 
 // ============ COMMAND DISPATCHER ============
@@ -348,13 +380,17 @@ function updateHealthBar(cmd) {
 }
 
 function setTerrain(cmd) {
-    // Clear existing terrain
-    terrainContainer.removeAll(true);
-
-    const { tiles, width, height, ghostPadding } = cmd;
+    const { tiles, width, height, ghostPadding, isInstance } = cmd;
     const totalWidth = width + 2 * ghostPadding;
 
+    // Select the appropriate sprite pool and toggle container visibility
+    const sprites = isInstance ? instanceSprites : overworldSprites;
+    overworldContainer.setVisible(!isInstance);
+    instanceContainer.setVisible(isInstance);
+
+    // Update each sprite's appearance (fast - no allocation, just property changes)
     for (let i = 0; i < tiles.length; i++) {
+        const sprite = sprites[i];
         const tile = tiles[i];
         const x = i % totalWidth;
         const y = Math.floor(i / totalWidth);
@@ -362,23 +398,19 @@ function setTerrain(cmd) {
         const worldY = y - ghostPadding;
 
         const tileConfig = getTileConfig(tile.type);
-        const sprite = mainScene.add.sprite(
-            worldX * TILE_SIZE,
-            worldY * TILE_SIZE,
-            'tileset',
-            tileConfig.frame
-        );
-        sprite.setOrigin(0, 0);
-        sprite.setDisplaySize(TILE_SIZE, TILE_SIZE);
+        sprite.setPosition(worldX * TILE_SIZE, worldY * TILE_SIZE);
+        sprite.setFrame(tileConfig.frame);
         sprite.setTint(tileConfig.tint);
 
         // Ghost area dimming
         const isGhost = worldX < 0 || worldX >= width || worldY < 0 || worldY >= height;
-        if (isGhost) {
-            sprite.setAlpha(0.3);
-        }
+        sprite.setAlpha(isGhost ? 0.3 : 1);
+        sprite.setVisible(true);
+    }
 
-        terrainContainer.add(sprite);
+    // Hide any excess sprites (if world is smaller than pool)
+    for (let i = tiles.length; i < sprites.length; i++) {
+        sprites[i].setVisible(false);
     }
 }
 
