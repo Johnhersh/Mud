@@ -1,9 +1,12 @@
 #!/bin/bash
 
-# Configure tmux
-cat >> ~/.tmux.conf << 'EOF'
-set -g mouse on
-set -g status-style 'bg=#333333 fg=#888888'
+# Install zellij
+curl -L https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz | tar xz -C ~/.local/bin
+
+# Create zellij config for mobile session (runs claude as default shell)
+mkdir -p ~/.config/zellij
+cat > ~/.config/zellij/mobile-config.kdl << 'EOF'
+default_shell "/home/vscode/.local/bin/claude"
 EOF
 
 # Set UTF-8 locale
@@ -18,18 +21,16 @@ npm install -g opencode-ai@latest
 # Install Claude Code
 curl -fsSL https://claude.ai/install.sh | bash
 
-# Add mobile tmux helper to bashrc
+# Add mobile zellij helper to bashrc
 cat >> ~/.bashrc << 'EOF'
 
-# Start tmux mobile session with claude
+# Start zellij mobile session with claude
 mobile() {
-    if tmux has-session -t mobile 2>/dev/null; then
-        tmux -u attach -t mobile
-    else
-        tmux -u new -s mobile \; \
-            set-environment VSCODE_IPC_HOOK_CLI "$VSCODE_IPC_HOOK_CLI" \; \
-            set-environment CLAUDE_CODE_SSE_PORT "$CLAUDE_CODE_SSE_PORT" \; \
-            send-keys 'claude' Enter
+    # Try to attach to existing session, or create new one
+    if ! zellij attach mobile 2>/dev/null; then
+        # Session doesn't exist or is dead - clean up and create fresh
+        zellij delete-session mobile --force 2>/dev/null
+        zellij --config ~/.config/zellij/mobile-config.kdl --session mobile
     fi
 }
 EOF

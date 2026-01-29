@@ -24,8 +24,7 @@ public class GameRenderer
     private const int CenterX = 400;
     private const int CenterY = 300;
 
-    // Tile index mapping (matches game.js TILE_TEXTURES)
-    // Frame calculation: x + y * 16 (16 tiles per row)
+    // Tile index mapping: frame = x + y * 49 (49 tiles per row in tileset)
     private static readonly Dictionary<TileType, (int frame, uint tint)> TileConfigs = new()
     {
         [TileType.GrassSparse] = (5, 0x228B22),     // (5,0) -> 5 + 0*16 = 5

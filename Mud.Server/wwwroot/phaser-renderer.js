@@ -2,30 +2,26 @@
 
 let game = null;
 let mainScene = null;
-const entities = new Map();      // entityId -> Phaser.GameObjects.Sprite
-const healthBars = new Map();    // entityId -> { bg, fg, maxHealth, width }
-const queuedPaths = new Map();   // entityId -> Phaser.GameObjects.Graphics[]
+const entities = new Map();
+const healthBars = new Map();
+const queuedPaths = new Map();
 let targetReticle = null;
 
-// Terrain sprite pools - pre-allocated at startup for instant world transitions
+// Terrain sprite pools pre-allocated at startup for instant world transitions
 let overworldContainer = null;
 let instanceContainer = null;
-let overworldSprites = [];       // 190x190 = 36,100 sprites (150 + 2*20 ghost padding)
-let instanceSprites = [];        // 60x60 = 3,600 sprites (50 + 2*5 ghost padding)
+let overworldSprites = [];
+let instanceSprites = [];
 
-// World size constants (must match server WorldConfig)
-const OVERWORLD_TOTAL = 190;     // 150 + 2*20
-const INSTANCE_TOTAL = 60;       // 50 + 2*5
-
-// Constants
+// Must match server WorldConfig
+const OVERWORLD_TOTAL = 190;
+const INSTANCE_TOTAL = 60;
 const TILE_SIZE = 20;
 const TILESET_TILE_SIZE = 16;
 const TILESET_SPACING = 1;
 
-// Tileset columns - determined after loading the spritesheet
-let TILESET_COLS = 49;  // Default, will be updated when texture loads
+let TILESET_COLS = 49;
 
-// Helper to convert (x, y) grid coordinates to frame index
 function xyToFrame(x, y) {
     return y * TILESET_COLS + x;
 }
@@ -35,8 +31,6 @@ function xyToFrame(x, y) {
 let initResolve = null;
 
 window.initPhaser = async function(containerId) {
-    console.log('initPhaser called with container:', containerId);
-
     const container = document.getElementById(containerId);
     if (!container) {
         console.error('Container not found:', containerId);
@@ -47,7 +41,7 @@ window.initPhaser = async function(containerId) {
         type: Phaser.AUTO,
         width: 800,
         height: 600,
-        parent: containerId,  // Use string ID instead of element
+        parent: containerId,
         pixelArt: true,
         roundPixels: true,
         backgroundColor: '#000000',
@@ -60,12 +54,10 @@ window.initPhaser = async function(containerId) {
     return new Promise(resolve => {
         initResolve = resolve;
         game = new Phaser.Game(config);
-        console.log('Phaser Game created');
     });
 };
 
 function preload() {
-    console.log('Phaser preload starting');
     this.load.spritesheet('tileset', 'assets/colored-transparent.png', {
         frameWidth: TILESET_TILE_SIZE,
         frameHeight: TILESET_TILE_SIZE,
@@ -73,41 +65,28 @@ function preload() {
         margin: 0
     });
 
-    // Determine tileset columns from image dimensions
     this.load.on('filecomplete-spritesheet-tileset', (key, type, texture) => {
         const tex = this.textures.get('tileset');
         if (tex && tex.source && tex.source[0]) {
             const imgWidth = tex.source[0].width;
             TILESET_COLS = Math.floor((imgWidth + TILESET_SPACING) / (TILESET_TILE_SIZE + TILESET_SPACING));
-            console.log('Tileset loaded:', imgWidth, 'px wide,', TILESET_COLS, 'columns');
         }
     });
 }
 
 function create() {
-    console.log('Phaser create starting');
     mainScene = this;
-
-    // Enable pixel-perfect camera to prevent gaps between tiles
     this.cameras.main.setRoundPixels(true);
 
-    // Pre-allocate terrain sprite pools for instant world transitions.
-    // Creating sprites is expensive, but updating their properties is cheap.
-    // By allocating all sprites at startup, world transitions become instant.
     overworldContainer = this.add.container(0, 0);
     overworldContainer.setDepth(0);
     overworldSprites = createTerrainPool(OVERWORLD_TOTAL * OVERWORLD_TOTAL, overworldContainer);
-    console.log(`Pre-allocated ${overworldSprites.length} overworld terrain sprites`);
 
     instanceContainer = this.add.container(0, 0);
     instanceContainer.setDepth(0);
     instanceContainer.setVisible(false);
     instanceSprites = createTerrainPool(INSTANCE_TOTAL * INSTANCE_TOTAL, instanceContainer);
-    console.log(`Pre-allocated ${instanceSprites.length} instance terrain sprites`);
 
-    console.log('Phaser scene created and ready');
-
-    // Resolve the init promise now that scene is ready
     if (initResolve) {
         initResolve();
         initResolve = null;
@@ -131,15 +110,9 @@ function createTerrainPool(count, container) {
 
 window.executeCommands = function(commands) {
     if (!mainScene) {
-        console.warn('Scene not ready, queuing', commands.length, 'commands');
+        console.warn('Scene not ready, dropping', commands.length, 'commands');
         return;
     }
-
-    // Log all command types to see what's being sent
-    const cmdTypes = commands.map(c => c.type);
-    const typeCounts = {};
-    cmdTypes.forEach(t => typeCounts[t] = (typeCounts[t] || 0) + 1);
-    console.log('Commands:', commands.length, typeCounts);
 
     for (const cmd of commands) {
         try {
@@ -179,11 +152,8 @@ function createSprite(cmd) {
     const { entityId, tileIndex, x, y, tint, depth } = cmd;
 
     if (entities.has(entityId)) {
-        console.warn(`Entity ${entityId} already exists`);
         return;
     }
-
-    console.log('Creating sprite:', entityId, 'at', x, y, 'frame:', tileIndex);
 
     const sprite = mainScene.add.sprite(
         x * TILE_SIZE,
@@ -198,7 +168,6 @@ function createSprite(cmd) {
         sprite.setTint(tint);
     }
 
-    // Use provided depth or default to 50 (well above terrain at 0)
     const finalDepth = (depth !== undefined && depth !== null) ? depth : 50;
     sprite.setDepth(finalDepth);
 
@@ -212,7 +181,6 @@ function destroySprite(cmd) {
         entities.delete(cmd.entityId);
     }
 
-    // Also clean up associated health bar
     const healthBar = healthBars.get(cmd.entityId);
     if (healthBar) {
         healthBar.bg.destroy();
@@ -220,7 +188,6 @@ function destroySprite(cmd) {
         healthBars.delete(cmd.entityId);
     }
 
-    // And queued path
     const paths = queuedPaths.get(cmd.entityId);
     if (paths) {
         paths.forEach(g => g.destroy());
@@ -232,14 +199,12 @@ function setPosition(cmd) {
     const sprite = entities.get(cmd.entityId);
     if (!sprite) return;
 
-    // Kill any active tweens before snapping, otherwise
-    // the old tween continues running and overrides our snap position
+    // Kill active tweens so they don't override snap position
     mainScene.tweens.killTweensOf(sprite);
 
     sprite.x = cmd.x * TILE_SIZE;
     sprite.y = cmd.y * TILE_SIZE;
 
-    // Move health bar too (also kill its tweens)
     const healthBar = healthBars.get(cmd.entityId);
     if (healthBar) {
         mainScene.tweens.killTweensOf(healthBar.bg);
@@ -260,7 +225,6 @@ function tweenTo(cmd) {
         ease: cmd.easing || 'Sine.easeInOut'
     });
 
-    // Also tween health bar
     const healthBar = healthBars.get(cmd.entityId);
     if (healthBar) {
         mainScene.tweens.add({
@@ -305,7 +269,6 @@ function bumpAttack(cmd) {
     const bumpY = startY + (target.y - startY) * 0.5;
     const duration = cmd.durationMs || 150;
 
-    // Bump toward target and back
     mainScene.tweens.chain({
         targets: attacker,
         tweens: [
@@ -314,7 +277,6 @@ function bumpAttack(cmd) {
         ]
     });
 
-    // Flash target
     mainScene.tweens.add({
         targets: target,
         alpha: 0.3,
@@ -325,9 +287,7 @@ function bumpAttack(cmd) {
 }
 
 function tweenCamera(cmd) {
-    // Phaser tweens interpolate through sub-pixel values (e.g., 100 -> 112.5 -> 125),
-    // which causes visible gaps between tiles even with roundPixels enabled.
-    // The onUpdate callback forces integer rounding every frame during the tween.
+    // Force integer rounding every frame to prevent sub-pixel gaps between tiles
     mainScene.tweens.add({
         targets: mainScene.cameras.main,
         scrollX: Math.round(-cmd.x),
@@ -342,11 +302,8 @@ function tweenCamera(cmd) {
 }
 
 function snapCamera(cmd) {
-    // Kill any active camera tweens before snapping, otherwise
-    // the old tween continues running and overrides our snap position
+    // Kill active tweens so they don't override snap position
     mainScene.tweens.killTweensOf(mainScene.cameras.main);
-
-    // Instant camera position (first frame, world transitions)
     mainScene.cameras.main.setScroll(Math.round(-cmd.x), Math.round(-cmd.y));
 }
 
@@ -385,7 +342,6 @@ function updateHealthBar(cmd) {
         duration: 200
     });
 
-    // Color based on health
     let color = 0x00ff00;
     if (percent <= 0.3) color = 0xff0000;
     else if (percent <= 0.6) color = 0xffff00;
@@ -397,12 +353,10 @@ function setTerrain(cmd) {
     const { tiles, width, height, ghostPadding, isInstance } = cmd;
     const totalWidth = width + 2 * ghostPadding;
 
-    // Select the appropriate sprite pool and toggle container visibility
     const sprites = isInstance ? instanceSprites : overworldSprites;
     overworldContainer.setVisible(!isInstance);
     instanceContainer.setVisible(isInstance);
 
-    // Update each sprite's appearance (fast - no allocation, just property changes)
     for (let i = 0; i < tiles.length; i++) {
         const sprite = sprites[i];
         const tile = tiles[i];
@@ -416,30 +370,24 @@ function setTerrain(cmd) {
         sprite.setFrame(tileConfig.frame);
         sprite.setTint(tileConfig.tint);
 
-        // Ghost area dimming
         const isGhost = worldX < 0 || worldX >= width || worldY < 0 || worldY >= height;
         sprite.setAlpha(isGhost ? 0.3 : 1);
         sprite.setVisible(true);
     }
 
-    // Hide any excess sprites (if world is smaller than pool)
     for (let i = tiles.length; i < sprites.length; i++) {
         sprites[i].setVisible(false);
     }
 }
 
 function switchTerrainLayer(cmd) {
-    // Switch which terrain container is visible without updating tile data.
-    // Used when returning to a world whose tiles were already sent.
-    const { isInstance } = cmd;
-    overworldContainer.setVisible(!isInstance);
-    instanceContainer.setVisible(isInstance);
+    overworldContainer.setVisible(!cmd.isInstance);
+    instanceContainer.setVisible(cmd.isInstance);
 }
 
 function setQueuedPath(cmd) {
     const { entityId, path } = cmd;
 
-    // Clear existing path graphics
     const existing = queuedPaths.get(entityId);
     if (existing) {
         existing.forEach(g => g.destroy());
@@ -462,7 +410,6 @@ function setQueuedPath(cmd) {
 }
 
 function setTargetReticle(cmd) {
-    // Remove existing reticle
     if (targetReticle) {
         targetReticle.destroy();
         targetReticle = null;
@@ -480,7 +427,6 @@ function setTargetReticle(cmd) {
     targetReticle.y = target.y;
     targetReticle.setDepth(150);
 
-    // Update position on each frame to follow target
     mainScene.events.on('update', () => {
         if (targetReticle && cmd.entityId) {
             const t = entities.get(cmd.entityId);
@@ -495,7 +441,6 @@ function setTargetReticle(cmd) {
 // ============ HELPERS ============
 
 function getTileConfig(tileType) {
-    // Tile configs using (x, y) grid coordinates - matches original game.js TILE_TEXTURES
     const configs = {
         0: { x: 5, y: 0, tint: 0x228B22 },      // GrassSparse
         1: { x: 6, y: 0, tint: 0x228B22 },      // GrassMedium
@@ -523,21 +468,18 @@ function updateHealthBarPosition(entityId, tileX, tileY) {
     healthBar.fg.y = tileY * TILE_SIZE - 4;
 }
 
-// Interaction info helper (for compatibility with Home.razor)
 window.getInteractionInfo = (snapshot, playerId) => {
     if (!snapshot) return null;
 
     const player = snapshot.entities?.find(e => e.id === playerId);
     if (!player) return null;
 
-    // Check for exit marker
     if (snapshot.exitMarker &&
         player.position.x === snapshot.exitMarker.x &&
         player.position.y === snapshot.exitMarker.y) {
         return { type: 'exit', text: 'Press Enter to Exit' };
     }
 
-    // Check for POI
     if (snapshot.poIs) {
         const poi = snapshot.poIs.find(p =>
             p.position.x === player.position.x &&
