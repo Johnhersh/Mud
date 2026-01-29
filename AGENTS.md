@@ -7,7 +7,7 @@ This repository contains "Mud", a web-based MMO prototype featuring a retro-futu
 The solution is divided into three main projects:
 
 - **Mud.Server**: ASP.NET Core Web App. Handles game simulation, authoritative state, and broadcasts world snapshots.
-- **Mud.Client**: Blazor WebAssembly app. Manages UI, input handling, and rendering via PixiJS.
+- **Mud.Client**: Blazor WebAssembly app. Manages UI, input handling, and rendering via Phaser 4.
 - **Mud.Shared**: C# Class Library containing shared models and enums used by both Client and Server.
 
 ## 🛠 Essential Commands
@@ -30,17 +30,18 @@ The solution is divided into three main projects:
   - **Entities**: `Player` generalized to `Entity` with `Health`, `MaxHealth`, and `EntityType` (Player, Monster).
   - **Melee**: "Bump" combat triggers when moving into a monster's tile.
   - **Ranged**: `Tab` to cycle targets, `f` to perform a ranged attack.
-  - **Visuals**: Health bars and target reticles rendered in `game.js`.
+  - **Visuals**: Health bars and target reticles rendered via Phaser commands.
 
 ## 🎨 Frontend & Rendering
 
-- **Rendering Engine**: **PixiJS** is used for high-performance WebGL rendering.
-- **Tileset**: Uses `Mud.Server/wwwroot/assets/colored-transparent.png` (16x16 tiles with 1px spacing).
-- **Pixel Perfection**: `scaleMode` is set to `nearest` and `mipmap` is disabled to ensure crisp ASCII visuals.
-- **JS Interop**: Blazor communicates with PixiJS via `IJSRuntime`. 
-  - `initPixi(containerId)`: Initializes the Pixi application, layers (floor, wall, player, ui), and loads assets.
-  - `renderSnapshot(snapshot)`: Updates the visual state using a persistent sprite management system for performance and stability.
-- **Location**: JavaScript rendering logic is located in `Mud.Server/wwwroot/game.js`.
+- **Rendering Engine**: **Phaser 4** with a thin command-based interop layer.
+- **Architecture**: C# `GameRenderer` produces render commands, JS `phaser-renderer.js` executes them.
+- **Tileset**: Uses `Mud.Server/wwwroot/assets/colored-transparent.png` (16x16 tiles with 1px spacing, rendered at 20x20).
+- **Terrain Pooling**: Sprite pools pre-allocated at startup for instant world transitions (overworld: 36,100 sprites, instance: 3,600 sprites).
+- **JS Interop**: Blazor communicates with Phaser via `IJSRuntime`.
+  - `initPhaser(containerId)`: Initializes Phaser, loads tileset, pre-allocates terrain sprite pools.
+  - `executeCommands(commands)`: Processes render commands (CreateSprite, TweenTo, SnapCamera, SetTerrain, etc.).
+- **Location**: JavaScript rendering logic is in `Mud.Server/wwwroot/phaser-renderer.js`.
 
 ## 📝 Coding Conventions
 
@@ -110,7 +111,7 @@ Use Blazor CSS isolation (`Component.razor.css`) instead of inline styles or glo
 
 ## ⚠️ Gotchas & Patterns
 
-- **Coordinate System**: The game uses a tile-based coordinate system. Rendering in `game.js` offsets coordinates by `+400` (X) and `+300` (Y) to center the (0,0) position on an 800x600 canvas.
+- **Coordinate System**: The game uses a tile-based coordinate system. Camera is centered on the player by offsetting to (400, 300) on the 800x600 canvas.
 - **Input Handling**: Keyboard events are captured in `Home.razor` and sent to the server via `GameClient.MoveAsync`.
 - **Collision**: Basic wall collision is handled server-side in `GameLoopService.Update()`.
 - **Prerendering**: Interactive WebAssembly components are configured with `prerender: false` in `App.razor` to avoid issues with JS Interop during initial load.
@@ -134,7 +135,7 @@ When a task is completed and the user says "finalize", "close the task", or "I'm
 1. **Phase 1**: Project Scaffolding (Done)
 2. **Phase 2**: Backend Core / Heartbeat (Done)
 3. **Phase 3**: Frontend Core / Input (Done)
-4. **Phase 4**: Rendering / PixiJS (Done)
+4. **Phase 4**: Rendering / Phaser 4 (Done)
 5. **Phase 5**: Movement Queuing (Done)
 6. **Phase 6**: Tileset Rendering (Done)
 7. **Phase 7**: Basic Combat System (Done)

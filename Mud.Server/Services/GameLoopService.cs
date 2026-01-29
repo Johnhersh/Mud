@@ -342,19 +342,8 @@ public class GameLoopService : BackgroundService
 
         if (newTarget.Health <= 0)
         {
-            // Respawn monster
-            var random = new Random();
-            var pos = world.FindRandomWalkablePosition(random);
-            if (pos != null)
-            {
-                world.UpdateEntity(newTarget with { Health = target.MaxHealth, Position = pos });
-                _logger.LogInformation("Entity {TargetId} died and respawned at {Pos}", targetId, pos);
-            }
-            else
-            {
-                world.RemoveEntity(targetId);
-                _logger.LogInformation("Entity {TargetId} died (no spawn position)", targetId);
-            }
+            world.RemoveEntity(targetId);
+            _logger.LogInformation("Entity {TargetId} died", targetId);
         }
         else
         {
@@ -394,8 +383,8 @@ public class GameLoopService : BackgroundService
 
             foreach (var playerState in players)
             {
-                // Only include tiles if this is a new world for the player
-                bool needsTiles = playerState.LastSentTilesWorldId != worldId;
+                // Only include tiles if we haven't sent this world's tiles before
+                bool needsTiles = !playerState.SentTilesWorldIds.Contains(worldId);
 
                 if (needsTiles)
                 {
@@ -403,7 +392,7 @@ public class GameLoopService : BackgroundService
                     snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true);
                     _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
                         playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
-                    playerState.LastSentTilesWorldId = worldId;
+                    playerState.SentTilesWorldIds.Add(worldId);
                     await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithTiles);
                 }
                 else

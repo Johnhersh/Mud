@@ -3,7 +3,9 @@
 @using Mud.Shared
 @using Mud.Shared.World
 @using Mud.Client.Services
+@using Mud.Client.Rendering
 @inject GameClient GameClient
+@inject GameRenderer Renderer
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -12,11 +14,7 @@
 <div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;" id="game-container">
     <h1>Mud V0</h1>
 
-    @if (_snapshot == null)
-    {
-        <p>Connecting...</p>
-    }
-    else
+    @if (_snapshot != null)
     {
         <p>
             Tick: @_snapshot.Tick |
@@ -24,45 +22,75 @@
             Entities: @_snapshot.Entities.Count |
             Target: @(_targetId ?? "None")
         </p>
-        <div style="position: relative;">
-            <div id="pixi-container" style="width: 800px; height: 600px; border: 1px solid #ccc;"></div>
-            @if (!string.IsNullOrEmpty(_interactionPrompt))
-            {
-                <div class="interaction-prompt">
-                    @_interactionPrompt
-                </div>
-            }
-        </div>
     }
+
+    <div style="position: relative;">
+        <div id="phaser-container" style="width: 800px; height: 600px; border: 1px solid #ccc; background: #000;"></div>
+
+        @if (_status != GameStatus.Playing)
+        {
+            <div class="status-overlay">
+                @switch (_status)
+                {
+                    case GameStatus.InitializingRenderer:
+                        <p>Initializing renderer...</p>
+                        break;
+                    case GameStatus.Connecting:
+                        <p>Connecting to server...</p>
+                        break;
+                }
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_interactionPrompt))
+        {
+            <div class="interaction-prompt">
+                @_interactionPrompt
+            </div>
+        }
+    </div>
 </div>
 
 @code {
+    private enum GameStatus { InitializingRenderer, Connecting, Playing }
+
+    private GameStatus _status = GameStatus.InitializingRenderer;
     private WorldSnapshot? _snapshot;
-    private bool _pixiInitialized = false;
     private List<Direction> _localInputQueue = new();
-    private List<Point> _localQueuedPath = new();
     private string? _myPlayerId;
     private string? _targetId;
     private string? _interactionPrompt;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        GameClient.OnWorldUpdate += HandleWorldUpdate;
-        await GameClient.StartAsync();
-        _myPlayerId = GameClient.ConnectionId;
-        await GameClient.JoinAsync("Player" + Random.Shared.Next(100));
+        if (firstRender)
+        {
+            // Step 1: Initialize Phaser (container is now rendered)
+            await JS.InvokeVoidAsync("initPhaser", "phaser-container");
+
+            // Step 2: Connect to server
+            _status = GameStatus.Connecting;
+            StateHasChanged();
+
+            GameClient.OnWorldUpdate += HandleWorldUpdate;
+            await GameClient.StartAsync();
+            _myPlayerId = GameClient.ConnectionId;
+
+            // Step 3: Join game - snapshots will now arrive with Phaser ready
+            await GameClient.JoinAsync("Player" + Random.Shared.Next(100));
+        }
     }
 
     private async void HandleWorldUpdate(WorldSnapshot snapshot)
     {
         _snapshot = snapshot;
         _myPlayerId = GameClient.ConnectionId;
+        _status = GameStatus.Playing;
 
         // Reconcile local queue with server state
         var me = _snapshot.Entities.FirstOrDefault(p => p.Id == _myPlayerId);
         if (me != null)
         {
-            // Update local input queue length based on server's queued path
             while (_localInputQueue.Count > me.QueuedPath.Count)
             {
                 _localInputQueue.RemoveAt(0);
@@ -75,28 +103,21 @@
             _targetId = null;
         }
 
-        if (!_pixiInitialized && _snapshot != null)
-        {
-            _pixiInitialized = true;
-            StateHasChanged();
-            await Task.Delay(100); // Wait for container to render
-            await JS.InvokeVoidAsync("initPixi", "pixi-container");
-        }
+        // Phaser is guaranteed ready - just render
+        Renderer.ProcessSnapshot(snapshot, _targetId, _myPlayerId!);
+        await Renderer.FlushAsync();
 
-        if (_pixiInitialized)
-        {
-            await JS.InvokeVoidAsync("renderSnapshot", snapshot, _targetId, _myPlayerId);
-
-            // Get interaction prompt
-            var interactionInfo = await JS.InvokeAsync<InteractionInfo?>("getInteractionInfo", snapshot, _myPlayerId);
-            _interactionPrompt = interactionInfo?.Text;
-        }
+        // Get interaction prompt
+        var interactionInfo = await JS.InvokeAsync<InteractionInfo?>("getInteractionInfo", snapshot, _myPlayerId);
+        _interactionPrompt = interactionInfo?.Text;
 
         StateHasChanged();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
+        if (_status != GameStatus.Playing) return;
+
         if (e.Key == "Tab")
         {
             CycleTarget();
