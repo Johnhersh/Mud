@@ -3,7 +3,9 @@
 @using Mud.Shared
 @using Mud.Shared.World
 @using Mud.Client.Services
+@using Mud.Client.Rendering
 @inject GameClient GameClient
+@inject GameRenderer Renderer
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -25,7 +27,7 @@
             Target: @(_targetId ?? "None")
         </p>
         <div style="position: relative;">
-            <div id="pixi-container" style="width: 800px; height: 600px; border: 1px solid #ccc;"></div>
+            <div id="phaser-container" style="width: 800px; height: 600px; border: 1px solid #ccc;"></div>
             @if (!string.IsNullOrEmpty(_interactionPrompt))
             {
                 <div class="interaction-prompt">
@@ -38,7 +40,8 @@
 
 @code {
     private WorldSnapshot? _snapshot;
-    private bool _pixiInitialized = false;
+    private bool _phaserInitialized = false;
+    private bool _initializingPhaser = false;
     private List<Direction> _localInputQueue = new();
     private List<Point> _localQueuedPath = new();
     private string? _myPlayerId;
@@ -75,17 +78,20 @@
             _targetId = null;
         }
 
-        if (!_pixiInitialized && _snapshot != null)
+        if (!_phaserInitialized && !_initializingPhaser && _snapshot != null)
         {
-            _pixiInitialized = true;
+            _initializingPhaser = true;
             StateHasChanged();
             await Task.Delay(100); // Wait for container to render
-            await JS.InvokeVoidAsync("initPixi", "pixi-container");
+            await JS.InvokeVoidAsync("initPhaser", "phaser-container");
+            _phaserInitialized = true;
         }
 
-        if (_pixiInitialized)
+        if (_phaserInitialized)
         {
-            await JS.InvokeVoidAsync("renderSnapshot", snapshot, _targetId, _myPlayerId);
+            // Use GameRenderer to process snapshot and send commands
+            Renderer.ProcessSnapshot(snapshot, _targetId, _myPlayerId!);
+            await Renderer.FlushAsync();
 
             // Get interaction prompt
             var interactionInfo = await JS.InvokeAsync<InteractionInfo?>("getInteractionInfo", snapshot, _myPlayerId);

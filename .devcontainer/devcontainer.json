@@ -20,7 +20,7 @@
 	//		}
 	// }
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "npm install -g @charmland/crush opencode-ai@latest && curl -fsSL https://claude.ai/install.sh | bash",
+	"postCreateCommand": "bash .devcontainer/setup.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [
