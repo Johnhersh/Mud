@@ -283,14 +283,19 @@ function bumpAttack(cmd) {
 }
 
 function tweenCamera(cmd) {
-    // Smooth camera movement - Phaser handles per-frame interpolation
-    // Round to integers to prevent sub-pixel gaps
+    // Phaser tweens interpolate through sub-pixel values (e.g., 100 -> 112.5 -> 125),
+    // which causes visible gaps between tiles even with roundPixels enabled.
+    // The onUpdate callback forces integer rounding every frame during the tween.
     mainScene.tweens.add({
         targets: mainScene.cameras.main,
         scrollX: Math.round(-cmd.x),
         scrollY: Math.round(-cmd.y),
         duration: cmd.durationMs,
-        ease: cmd.easing || 'Sine.easeOut'
+        ease: cmd.easing || 'Sine.easeOut',
+        onUpdate: (tween, target) => {
+            target.scrollX = Math.round(target.scrollX);
+            target.scrollY = Math.round(target.scrollY);
+        }
     });
 }
 
