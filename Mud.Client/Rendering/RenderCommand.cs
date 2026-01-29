@@ -82,6 +82,12 @@ public record SetTerrainCommand(
 ) : RenderCommand("SetTerrain", null);
 
 /// <summary>
+/// Switch which terrain layer is visible (overworld vs instance).
+/// Used when returning to a world whose tiles were already sent.
+/// </summary>
+public record SwitchTerrainLayerCommand(bool IsInstance) : RenderCommand("SwitchTerrainLayer", null);
+
+/// <summary>
 /// Simplified tile data for rendering (no walkability needed in JS).
 /// </summary>
 public record TileRenderData(int Type);

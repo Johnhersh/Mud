@@ -165,6 +165,7 @@ function executeCommand(cmd) {
         case 'CreateHealthBar': return createHealthBar(cmd);
         case 'UpdateHealthBar': return updateHealthBar(cmd);
         case 'SetTerrain': return setTerrain(cmd);
+        case 'SwitchTerrainLayer': return switchTerrainLayer(cmd);
         case 'SetQueuedPath': return setQueuedPath(cmd);
         case 'SetTargetReticle': return setTargetReticle(cmd);
         default:
@@ -231,10 +232,19 @@ function setPosition(cmd) {
     const sprite = entities.get(cmd.entityId);
     if (!sprite) return;
 
+    // Kill any active tweens before snapping, otherwise
+    // the old tween continues running and overrides our snap position
+    mainScene.tweens.killTweensOf(sprite);
+
     sprite.x = cmd.x * TILE_SIZE;
     sprite.y = cmd.y * TILE_SIZE;
 
-    // Move health bar too
+    // Move health bar too (also kill its tweens)
+    const healthBar = healthBars.get(cmd.entityId);
+    if (healthBar) {
+        mainScene.tweens.killTweensOf(healthBar.bg);
+        mainScene.tweens.killTweensOf(healthBar.fg);
+    }
     updateHealthBarPosition(cmd.entityId, cmd.x, cmd.y);
 }
 
@@ -332,6 +342,10 @@ function tweenCamera(cmd) {
 }
 
 function snapCamera(cmd) {
+    // Kill any active camera tweens before snapping, otherwise
+    // the old tween continues running and overrides our snap position
+    mainScene.tweens.killTweensOf(mainScene.cameras.main);
+
     // Instant camera position (first frame, world transitions)
     mainScene.cameras.main.setScroll(Math.round(-cmd.x), Math.round(-cmd.y));
 }
@@ -412,6 +426,14 @@ function setTerrain(cmd) {
     for (let i = tiles.length; i < sprites.length; i++) {
         sprites[i].setVisible(false);
     }
+}
+
+function switchTerrainLayer(cmd) {
+    // Switch which terrain container is visible without updating tile data.
+    // Used when returning to a world whose tiles were already sent.
+    const { isInstance } = cmd;
+    overworldContainer.setVisible(!isInstance);
+    instanceContainer.setVisible(isInstance);
 }
 
 function setQueuedPath(cmd) {

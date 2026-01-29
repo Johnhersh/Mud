@@ -16,6 +16,7 @@ public class GameRenderer
     private string? _targetEntityId;
     private string? _myPlayerId;
     private bool _cameraInitialized;
+    private bool _worldJustChanged;
 
     // Constants - match server tick interval for smooth movement
     private const int TickDurationMs = 300;
@@ -53,21 +54,12 @@ public class GameRenderer
     {
         _myPlayerId = playerId;
 
-        // Handle world change (terrain)
-        if (snapshot.WorldId != _currentWorldId && snapshot.Tiles != null && snapshot.Tiles.Count > 0)
+        // Detect world change (for camera/entity snap behavior)
+        bool isInstance = snapshot.WorldType == WorldType.Instance;
+        if (snapshot.WorldId != _currentWorldId)
         {
-            var tileRenderData = snapshot.Tiles
-                .Select(t => new TileRenderData((int)t.Type))
-                .ToList();
-
-            _buffer.SetTerrain(
-                snapshot.WorldId,
-                tileRenderData,
-                snapshot.Width,
-                snapshot.Height,
-                snapshot.GhostPadding,
-                isInstance: snapshot.WorldType == WorldType.Instance
-            );
+            _worldJustChanged = true;
+            _currentWorldId = snapshot.WorldId;
 
             // Clear static sprites from old world (POIs, exit markers)
             foreach (var spriteId in _staticSprites)
@@ -76,7 +68,27 @@ public class GameRenderer
             }
             _staticSprites.Clear();
 
-            _currentWorldId = snapshot.WorldId;
+            // Update terrain if tiles are provided (server only sends on first visit to a world)
+            if (snapshot.Tiles != null && snapshot.Tiles.Count > 0)
+            {
+                var tileRenderData = snapshot.Tiles
+                    .Select(t => new TileRenderData((int)t.Type))
+                    .ToList();
+
+                _buffer.SetTerrain(
+                    snapshot.WorldId,
+                    tileRenderData,
+                    snapshot.Width,
+                    snapshot.Height,
+                    snapshot.GhostPadding,
+                    isInstance
+                );
+            }
+            else
+            {
+                // No tiles sent (already cached) - just switch which terrain layer is visible
+                _buffer.SwitchTerrainLayer(isInstance);
+            }
         }
 
         // Track which entities are in this snapshot
@@ -114,8 +126,16 @@ public class GameRenderer
                 // Existing entity - check for changes
                 if (entity.Position != state.Position)
                 {
-                    // Queue smooth movement (Phaser handles interpolation)
-                    _buffer.TweenTo(entity.Id, entity.Position.X, entity.Position.Y, TickDurationMs);
+                    if (_worldJustChanged)
+                    {
+                        // World transition: snap to new position instantly
+                        _buffer.SetPosition(entity.Id, entity.Position.X, entity.Position.Y);
+                    }
+                    else
+                    {
+                        // Normal movement: smooth tween
+                        _buffer.TweenTo(entity.Id, entity.Position.X, entity.Position.Y, TickDurationMs);
+                    }
                 }
 
                 if (entity.Health != state.Health)
@@ -140,11 +160,12 @@ public class GameRenderer
             var camX = CenterX - (player.Position.X * TileSize);
             var camY = CenterY - (player.Position.Y * TileSize);
 
-            if (!_cameraInitialized)
+            if (!_cameraInitialized || _worldJustChanged)
             {
-                // First frame: snap camera instantly
+                // First frame or world transition: snap camera instantly
                 _buffer.SnapCamera(camX, camY);
                 _cameraInitialized = true;
+                _worldJustChanged = false;
             }
             else
             {

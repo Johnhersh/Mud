@@ -75,6 +75,12 @@ public class RenderCommandBuffer
         return this;
     }
 
+    public RenderCommandBuffer SwitchTerrainLayer(bool isInstance)
+    {
+        _commands.Add(new SwitchTerrainLayerCommand(isInstance));
+        return this;
+    }
+
     public RenderCommandBuffer SetQueuedPath(string entityId, List<PathPoint> path)
     {
         _commands.Add(new SetQueuedPathCommand(entityId, path));
