@@ -14,9 +14,9 @@ public class PlayerState
     public Point LastOverworldPosition { get; set; } = new(0, 0);
 
     /// <summary>
-    /// Track which world's tiles have been sent to avoid resending static data
+    /// Track which worlds have had tiles sent to avoid resending static data
     /// </summary>
-    public string? LastSentTilesWorldId { get; set; }
+    public HashSet<string> SentTilesWorldIds { get; } = new();
 
     /// <summary>
     /// Move player to a new world

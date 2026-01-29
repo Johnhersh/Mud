@@ -383,8 +383,8 @@ public class GameLoopService : BackgroundService
 
             foreach (var playerState in players)
             {
-                // Only include tiles if this is a new world for the player
-                bool needsTiles = playerState.LastSentTilesWorldId != worldId;
+                // Only include tiles if we haven't sent this world's tiles before
+                bool needsTiles = !playerState.SentTilesWorldIds.Contains(worldId);
 
                 if (needsTiles)
                 {
@@ -392,7 +392,7 @@ public class GameLoopService : BackgroundService
                     snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true);
                     _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
                         playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
-                    playerState.LastSentTilesWorldId = worldId;
+                    playerState.SentTilesWorldIds.Add(worldId);
                     await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithTiles);
                 }
                 else
