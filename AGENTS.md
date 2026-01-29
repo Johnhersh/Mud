@@ -130,13 +130,3 @@ When a task is completed and the user says "finalize", "close the task", or "I'm
 3. **Verification**: Ensure the project still builds and the todo list is cleared.
 4. **Completion**: Use the `todos` tool to clear the list and provide a concise summary of the final state.
 5. **Git Commit Draft**: Provide a concise (1-2 sentence) summary of the task's purpose and impact, suitable for a git commit message. Focus on "why" and "how" the goal was achieved, rather than listing specific code changes.
-
-## 🗺 Roadmap (V0 Prototype)
-1. **Phase 1**: Project Scaffolding (Done)
-2. **Phase 2**: Backend Core / Heartbeat (Done)
-3. **Phase 3**: Frontend Core / Input (Done)
-4. **Phase 4**: Rendering / Phaser 4 (Done)
-5. **Phase 5**: Movement Queuing (Done)
-6. **Phase 6**: Tileset Rendering (Done)
-7. **Phase 7**: Basic Combat System (Done)
-8. **Phase 8**: Testing & Validation (Pending)
