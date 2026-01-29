@@ -342,19 +342,8 @@ public class GameLoopService : BackgroundService
 
         if (newTarget.Health <= 0)
         {
-            // Respawn monster
-            var random = new Random();
-            var pos = world.FindRandomWalkablePosition(random);
-            if (pos != null)
-            {
-                world.UpdateEntity(newTarget with { Health = target.MaxHealth, Position = pos });
-                _logger.LogInformation("Entity {TargetId} died and respawned at {Pos}", targetId, pos);
-            }
-            else
-            {
-                world.RemoveEntity(targetId);
-                _logger.LogInformation("Entity {TargetId} died (no spawn position)", targetId);
-            }
+            world.RemoveEntity(targetId);
+            _logger.LogInformation("Entity {TargetId} died", targetId);
         }
         else
         {
