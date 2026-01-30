@@ -11,83 +11,82 @@ public class GameRenderer
 {
     private readonly RenderCommandBuffer _buffer;
     private readonly Dictionary<string, EntityRenderState> _entities = new();
-    private readonly HashSet<string> _staticSprites = new();  // POIs, exit markers, etc.
+    private readonly HashSet<string> _staticSprites = new();
     private string? _currentWorldId;
     private bool _cameraInitialized;
-    private bool _worldJustChanged;
 
-    // Constants - match server tick interval for smooth movement
     private const int TickDurationMs = 300;
     private const int TileSize = 20;
     private const int CenterX = 400;
     private const int CenterY = 300;
 
-    // Tile index mapping: frame = x + y * 49 (49 tiles per row in tileset)
     private static readonly Dictionary<TileType, (int frame, uint tint)> TileConfigs = new()
     {
-        [TileType.GrassSparse] = (5, 0x228B22),     // (5,0) -> 5 + 0*16 = 5
-        [TileType.GrassMedium] = (6, 0x228B22),     // (6,0) -> 6 + 0*16 = 6
-        [TileType.GrassDense] = (7, 0x228B22),      // (7,0) -> 7 + 0*16 = 7
-        [TileType.Water] = (88, 0xFFFFFF),          // (8,5) -> 8 + 5*16 = 88
-        [TileType.Bridge] = (86, 0xFFFFFF),         // (6,5) -> 6 + 5*16 = 86
-        [TileType.TreeSparse] = (17, 0xFFFFFF),     // (1,1) -> 1 + 1*16 = 17
-        [TileType.TreeMedium] = (18, 0xFFFFFF),     // (2,1) -> 2 + 1*16 = 18
-        [TileType.TreeDense] = (19, 0xFFFFFF),      // (3,1) -> 3 + 1*16 = 19
-        [TileType.POIMarker] = (41, 0xFFD700),      // (9,2) -> 9 + 2*16 = 41
-        [TileType.ExitMarker] = (11, 0xFF4500),     // (11,0) -> 11 + 0*16 = 11
-        [TileType.TownCenter] = (46, 0xFFFFFF)      // (14,2) -> 14 + 2*16 = 46
+        [TileType.GrassSparse] = (5, 0x228B22),
+        [TileType.GrassMedium] = (6, 0x228B22),
+        [TileType.GrassDense] = (7, 0x228B22),
+        [TileType.Water] = (88, 0xFFFFFF),
+        [TileType.Bridge] = (86, 0xFFFFFF),
+        [TileType.TreeSparse] = (17, 0xFFFFFF),
+        [TileType.TreeMedium] = (18, 0xFFFFFF),
+        [TileType.TreeDense] = (19, 0xFFFFFF),
+        [TileType.POIMarker] = (41, 0xFFD700),
+        [TileType.ExitMarker] = (11, 0xFF4500),
+        [TileType.TownCenter] = (46, 0xFFFFFF)
     };
 
-    public GameRenderer(RenderCommandBuffer buffer)
-    {
-        _buffer = buffer;
-    }
+    public GameRenderer(RenderCommandBuffer buffer) => _buffer = buffer;
 
     /// <summary>
     /// Processes a world snapshot, generates render commands, and flushes to JS.
-    /// Called on server ticks (~3/second), not every frame.
     /// </summary>
     public async ValueTask ProcessSnapshot(WorldSnapshot snapshot, string playerId)
     {
-        // Detect world change (for camera/entity snap behavior)
+        bool worldChanged = ProcessWorldChange(snapshot);
+        ProcessEntities(snapshot.Entities, worldChanged);
+        ProcessAttackEvents(snapshot.AttackEvents);
+        ProcessCamera(snapshot.Entities, playerId, worldChanged);
+        ProcessPOIs(snapshot.POIs);
+        ProcessExitMarker(snapshot.ExitMarker);
+
+        await _buffer.FlushToGameJS();
+    }
+
+    private bool ProcessWorldChange(WorldSnapshot snapshot)
+    {
+        if (snapshot.WorldId == _currentWorldId) return false;
+
+        _currentWorldId = snapshot.WorldId;
+
+        // Clear static sprites from old world
+        foreach (var spriteId in _staticSprites) _buffer.DestroySprite(spriteId);
+        _staticSprites.Clear();
+
+        // Update terrain
         bool isInstance = snapshot.WorldType == WorldType.Instance;
-        if (snapshot.WorldId != _currentWorldId)
+        if (snapshot.Tiles != null && snapshot.Tiles.Count > 0)
         {
-            _worldJustChanged = true;
-            _currentWorldId = snapshot.WorldId;
+            var tileRenderData = snapshot.Tiles
+                .Select(t => new TileRenderData((int)t.Type))
+                .ToList();
 
-            // Clear static sprites from old world (POIs, exit markers)
-            foreach (var spriteId in _staticSprites)
-            {
-                _buffer.DestroySprite(spriteId);
-            }
-            _staticSprites.Clear();
-
-            // Update terrain if tiles are provided (server only sends on first visit to a world)
-            if (snapshot.Tiles != null && snapshot.Tiles.Count > 0)
-            {
-                var tileRenderData = snapshot.Tiles
-                    .Select(t => new TileRenderData((int)t.Type))
-                    .ToList();
-
-                _buffer.SetTerrain(
-                    snapshot.WorldId,
-                    tileRenderData,
-                    snapshot.Width,
-                    snapshot.Height,
-                    snapshot.GhostPadding,
-                    isInstance
-                );
-            }
-            else
-            {
-                // No tiles sent (already cached) - just switch which terrain layer is visible
-                _buffer.SwitchTerrainLayer(isInstance);
-            }
+            _buffer.SetTerrain(
+                snapshot.WorldId,
+                tileRenderData,
+                snapshot.Width,
+                snapshot.Height,
+                snapshot.GhostPadding,
+                isInstance
+            );
         }
+        else _buffer.SwitchTerrainLayer(isInstance);
 
-        // Track which entities are in this snapshot
-        var currentEntityIds = snapshot.Entities.Select(e => e.Id).ToHashSet();
+        return true;
+    }
+
+    private void ProcessEntities(List<Entity> entities, bool worldChanged)
+    {
+        var currentEntityIds = entities.Select(e => e.Id).ToHashSet();
 
         // Remove entities no longer present
         foreach (var id in _entities.Keys.Except(currentEntityIds).ToList())
@@ -98,48 +97,10 @@ public class GameRenderer
         }
 
         // Create or update entities
-        foreach (var entity in snapshot.Entities)
+        foreach (var entity in entities)
         {
-            if (!_entities.TryGetValue(entity.Id, out var state))
-            {
-                // New entity - create sprite and health bar
-                // Tileset has 49 columns. Frame = y * 49 + x
-                // Player: (25,0) = 0*49 + 25 = 25
-                // Monster: (26,2) = 2*49 + 26 = 124
-                var tileIndex = entity.Type == EntityType.Player ? 25 : 124;
-                var tint = entity.Type == EntityType.Player ? 0xFFFF00u : 0xFF0000u;
-                var depth = 50;  // Well above terrain (depth 0)
-
-                _buffer.CreateSprite(entity.Id, tileIndex, entity.Position.X, entity.Position.Y, tint, depth);
-                _buffer.CreateHealthBar(entity.Id, entity.MaxHealth, entity.Health);
-
-                state = new EntityRenderState(entity);
-                _entities[entity.Id] = state;
-            }
-            else
-            {
-                // Existing entity - check for changes
-                if (entity.Position != state.Position)
-                {
-                    if (_worldJustChanged)
-                    {
-                        // World transition: snap to new position instantly
-                        _buffer.SetPosition(entity.Id, entity.Position.X, entity.Position.Y);
-                    }
-                    else
-                    {
-                        // Normal movement: smooth tween
-                        _buffer.TweenTo(entity.Id, entity.Position.X, entity.Position.Y, TickDurationMs);
-                    }
-                }
-
-                if (entity.Health != state.Health)
-                {
-                    _buffer.UpdateHealthBar(entity.Id, entity.Health);
-                }
-
-                state.Update(entity);
-            }
+            if (!_entities.TryGetValue(entity.Id, out var state)) CreateEntity(entity);
+            else UpdateEntity(entity, state, worldChanged);
 
             // Update queued path
             var pathPoints = entity.QueuedPath
@@ -147,78 +108,85 @@ public class GameRenderer
                 .ToList();
             _buffer.SetQueuedPath(entity.Id, pathPoints);
         }
+    }
 
-        // Process attack events for animations
-        foreach (var attack in snapshot.AttackEvents)
+    private void CreateEntity(Entity entity)
+    {
+        var tileIndex = entity.Type == EntityType.Player ? 25 : 124;
+        var tint = entity.Type == EntityType.Player ? 0xFFFF00u : 0xFF0000u;
+
+        _buffer.CreateSprite(entity.Id, tileIndex, entity.Position.X, entity.Position.Y, tint, depth: 50);
+        _buffer.CreateHealthBar(entity.Id, entity.MaxHealth, entity.Health);
+
+        _entities[entity.Id] = new EntityRenderState(entity);
+    }
+
+    private void UpdateEntity(Entity entity, EntityRenderState state, bool worldChanged)
+    {
+        if (entity.Position != state.Position)
+        {
+            if (worldChanged) _buffer.SetPosition(entity.Id, entity.Position.X, entity.Position.Y);
+            else _buffer.TweenTo(entity.Id, entity.Position.X, entity.Position.Y, TickDurationMs);
+        }
+
+        if (entity.Health != state.Health) _buffer.UpdateHealthBar(entity.Id, entity.Health);
+
+        state.Update(entity);
+    }
+
+    private void ProcessAttackEvents(List<AttackEvent> attackEvents)
+    {
+        foreach (var attack in attackEvents)
         {
             if (attack.IsMelee) _buffer.BumpAttack(attack.AttackerId, attack.TargetId);
 
             _buffer.FloatingDamage(attack.TargetPosition.X, attack.TargetPosition.Y, attack.Damage);
         }
-
-        // Camera follows player - send target, Phaser tweens to it
-        var player = snapshot.Entities.FirstOrDefault(e => e.Id == playerId);
-        if (player != null)
-        {
-            var camX = CenterX - (player.Position.X * TileSize);
-            var camY = CenterY - (player.Position.Y * TileSize);
-
-            if (!_cameraInitialized || _worldJustChanged)
-            {
-                // First frame or world transition: snap camera instantly
-                _buffer.SnapCamera(camX, camY);
-                _cameraInitialized = true;
-                _worldJustChanged = false;
-            }
-            else
-            {
-                // Subsequent frames: smooth tween over tick duration
-                _buffer.TweenCamera(camX, camY, TickDurationMs);
-            }
-        }
-
-        // POIs (rendered as terrain sprites with specific tiles)
-        if (snapshot.POIs != null && snapshot.POIs.Count > 0)
-        {
-            ProcessPOIs(snapshot.POIs);
-        }
-
-        // Exit marker
-        if (snapshot.ExitMarker != null)
-        {
-            ProcessExitMarker(snapshot.ExitMarker);
-        }
-
-        await _buffer.FlushToGameJS();
     }
 
-    private void ProcessPOIs(List<POI> pois)
+    private void ProcessCamera(List<Entity> entities, string playerId, bool worldChanged)
     {
+        var player = entities.FirstOrDefault(e => e.Id == playerId);
+        if (player is null) return;
+
+        var camX = CenterX - (player.Position.X * TileSize);
+        var camY = CenterY - (player.Position.Y * TileSize);
+
+        if (!_cameraInitialized || worldChanged)
+        {
+            _buffer.SnapCamera(camX, camY);
+            _cameraInitialized = true;
+        }
+        else _buffer.TweenCamera(camX, camY, TickDurationMs);
+    }
+
+    private void ProcessPOIs(List<POI>? pois)
+    {
+        if (pois is null) return;
+
         foreach (var poi in pois)
         {
             var spriteId = $"poi-{poi.Id}";
+            if (_staticSprites.Contains(spriteId)) continue;
 
-            if (_staticSprites.Contains(spriteId))
-                continue;
-
-            var tileConfig = poi.Type == POIType.Town
+            var (frame, tint) = poi.Type == POIType.Town
                 ? TileConfigs[TileType.TownCenter]
                 : TileConfigs[TileType.POIMarker];
 
-            _buffer.CreateSprite(spriteId, tileConfig.frame, poi.Position.X, poi.Position.Y, tileConfig.tint, 5);
+            _buffer.CreateSprite(spriteId, frame, poi.Position.X, poi.Position.Y, tint, depth: 5);
             _staticSprites.Add(spriteId);
         }
     }
 
-    private void ProcessExitMarker(Point exitMarker)
+    private void ProcessExitMarker(Point? exitMarker)
     {
-        var spriteId = "exit-marker";
-        var tileConfig = TileConfigs[TileType.ExitMarker];
+        if (exitMarker is null) return;
 
-        if (!_staticSprites.Contains(spriteId))
-        {
-            _buffer.CreateSprite(spriteId, tileConfig.frame, exitMarker.X, exitMarker.Y, tileConfig.tint, 5);
-            _staticSprites.Add(spriteId);
-        }
+        const string spriteId = "exit-marker";
+        if (_staticSprites.Contains(spriteId)) return;
+
+        var (frame, tint) = TileConfigs[TileType.ExitMarker];
+        _buffer.CreateSprite(spriteId, frame, exitMarker.X, exitMarker.Y, tint, depth: 5);
+        _staticSprites.Add(spriteId);
     }
 }
