@@ -6,6 +6,7 @@
 @using Mud.Client.Rendering
 @inject GameClient GameClient
 @inject GameRenderer Renderer
+@inject ImmediateCommands ImmediateCommands
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -101,11 +102,11 @@
         if (_targetId != null && !_snapshot.Entities.Any(e => e.Id == _targetId))
         {
             _targetId = null;
+            await ImmediateCommands.SetTargetReticle(null);
         }
 
         // Phaser is guaranteed ready - just render
-        Renderer.ProcessSnapshot(snapshot, _targetId, _myPlayerId!);
-        await Renderer.FlushAsync();
+        await Renderer.ProcessSnapshot(snapshot, _myPlayerId!);
 
         // Get interaction prompt
         var interactionInfo = await JS.InvokeAsync<InteractionInfo?>("getInteractionInfo", snapshot, _myPlayerId);
@@ -120,7 +121,7 @@
 
         if (e.Key == "Tab")
         {
-            CycleTarget();
+            await CycleTarget();
             return;
         }
 
@@ -169,7 +170,7 @@
         }
     }
 
-    private void CycleTarget()
+    private async Task CycleTarget()
     {
         if (_snapshot == null) return;
 
@@ -177,6 +178,7 @@
         if (!monsters.Any())
         {
             _targetId = null;
+            await ImmediateCommands.SetTargetReticle(null);
             return;
         }
 
@@ -196,6 +198,8 @@
                 _targetId = monsters[currentIndex + 1].Id;
             }
         }
+
+        await ImmediateCommands.SetTargetReticle(_targetId);
     }
 
     private bool IsOpposite(Direction d1, Direction d2)

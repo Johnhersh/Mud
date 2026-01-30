@@ -1,5 +1,33 @@
 // phaser-renderer.js - Thin command executor for Phaser 4
 
+// ============ COMMAND TYPE DEFINITIONS ============
+// IMPORTANT: These types mirror RenderCommandType enum and command records in
+// Mud.Client/Rendering/RenderCommand.cs. Any changes there must be reflected here.
+
+/**
+ * @typedef {'CreateSprite'|'DestroySprite'|'SetPosition'|'SetTint'|'SetVisible'|'SetDepth'|'TweenTo'|'BumpAttack'|'FloatingDamage'|'TweenCamera'|'SnapCamera'|'CreateHealthBar'|'UpdateHealthBar'|'SetTerrain'|'SwitchTerrainLayer'|'SetQueuedPath'|'SetTargetReticle'} RenderCommandType
+ */
+
+/** @typedef {{ type: 'CreateSprite', entityId: string, tileIndex: number, x: number, y: number, tint?: number, depth?: number }} CreateSpriteCmd */
+/** @typedef {{ type: 'DestroySprite', entityId: string }} DestroySpriteCmd */
+/** @typedef {{ type: 'SetPosition', entityId: string, x: number, y: number }} SetPositionCmd */
+/** @typedef {{ type: 'SetTint', entityId: string, tint: number }} SetTintCmd */
+/** @typedef {{ type: 'SetVisible', entityId: string, visible: boolean }} SetVisibleCmd */
+/** @typedef {{ type: 'SetDepth', entityId: string, depth: number }} SetDepthCmd */
+/** @typedef {{ type: 'TweenTo', entityId: string, x: number, y: number, durationMs?: number, easing?: string }} TweenToCmd */
+/** @typedef {{ type: 'BumpAttack', attackerId: string, targetId: string, durationMs?: number }} BumpAttackCmd */
+/** @typedef {{ type: 'FloatingDamage', x: number, y: number, damage: number, durationMs?: number }} FloatingDamageCmd */
+/** @typedef {{ type: 'TweenCamera', x: number, y: number, durationMs: number, easing?: string }} TweenCameraCmd */
+/** @typedef {{ type: 'SnapCamera', x: number, y: number }} SnapCameraCmd */
+/** @typedef {{ type: 'CreateHealthBar', entityId: string, maxHealth: number, currentHealth: number }} CreateHealthBarCmd */
+/** @typedef {{ type: 'UpdateHealthBar', entityId: string, currentHealth: number }} UpdateHealthBarCmd */
+/** @typedef {{ type: 'SetTerrain', worldId: string, tiles: {type: number}[], width: number, height: number, ghostPadding: number, isInstance: boolean }} SetTerrainCmd */
+/** @typedef {{ type: 'SwitchTerrainLayer', isInstance: boolean }} SwitchTerrainLayerCmd */
+/** @typedef {{ type: 'SetQueuedPath', entityId: string, path: {x: number, y: number}[] }} SetQueuedPathCmd */
+/** @typedef {{ type: 'SetTargetReticle', entityId: string|null }} SetTargetReticleCmd */
+
+/** @typedef {CreateSpriteCmd|DestroySpriteCmd|SetPositionCmd|SetTintCmd|SetVisibleCmd|SetDepthCmd|TweenToCmd|BumpAttackCmd|FloatingDamageCmd|TweenCameraCmd|SnapCameraCmd|CreateHealthBarCmd|UpdateHealthBarCmd|SetTerrainCmd|SwitchTerrainLayerCmd|SetQueuedPathCmd|SetTargetReticleCmd} RenderCommand */
+
 let game = null;
 let mainScene = null;
 const entities = new Map();
@@ -108,6 +136,9 @@ function createTerrainPool(count, container) {
 
 // ============ COMMAND DISPATCHER ============
 
+/**
+ * @param {RenderCommand[]} commands
+ */
 window.executeCommands = function(commands) {
     if (!mainScene) {
         console.warn('Scene not ready, dropping', commands.length, 'commands');
@@ -123,6 +154,9 @@ window.executeCommands = function(commands) {
     }
 };
 
+/**
+ * @param {RenderCommand} cmd
+ */
 function executeCommand(cmd) {
     switch (cmd.type) {
         case 'CreateSprite': return createSprite(cmd);
@@ -133,6 +167,7 @@ function executeCommand(cmd) {
         case 'SetVisible': return setVisible(cmd);
         case 'SetDepth': return setDepth(cmd);
         case 'BumpAttack': return bumpAttack(cmd);
+        case 'FloatingDamage': return floatingDamage(cmd);
         case 'TweenCamera': return tweenCamera(cmd);
         case 'SnapCamera': return snapCamera(cmd);
         case 'CreateHealthBar': return createHealthBar(cmd);
@@ -148,12 +183,11 @@ function executeCommand(cmd) {
 
 // ============ COMMAND IMPLEMENTATIONS ============
 
+/** @param {CreateSpriteCmd} cmd */
 function createSprite(cmd) {
     const { entityId, tileIndex, x, y, tint, depth } = cmd;
 
-    if (entities.has(entityId)) {
-        return;
-    }
+    if (entities.has(entityId)) return;
 
     const sprite = mainScene.add.sprite(
         x * TILE_SIZE,
@@ -174,6 +208,7 @@ function createSprite(cmd) {
     entities.set(entityId, sprite);
 }
 
+/** @param {DestroySpriteCmd} cmd */
 function destroySprite(cmd) {
     const sprite = entities.get(cmd.entityId);
     if (sprite) {
@@ -258,31 +293,61 @@ function setDepth(cmd) {
     }
 }
 
+/** @param {BumpAttackCmd} cmd */
 function bumpAttack(cmd) {
     const attacker = entities.get(cmd.attackerId);
     const target = entities.get(cmd.targetId);
-    if (!attacker || !target) return;
+    if (!attacker) return;
+
+    // Use target position if available, otherwise attacker stays in place
+    const targetX = target ? target.x : attacker.x;
+    const targetY = target ? target.y : attacker.y;
 
     const startX = attacker.x;
     const startY = attacker.y;
-    const bumpX = startX + (target.x - startX) * 0.5;
-    const bumpY = startY + (target.y - startY) * 0.5;
+    // Move 80% toward target (near tile edge) for satisfying "bounce" feel
+    const bumpX = startX + (targetX - startX) * 0.8;
+    const bumpY = startY + (targetY - startY) * 0.8;
     const duration = cmd.durationMs || 150;
 
     mainScene.tweens.chain({
         targets: attacker,
         tweens: [
-            { x: bumpX, y: bumpY, duration: duration / 2, ease: 'Power2' },
-            { x: startX, y: startY, duration: duration / 2, ease: 'Power2' }
+            { x: bumpX, y: bumpY, duration: duration * 0.25, ease: 'Power2.easeOut' },
+            { x: startX, y: startY, duration: duration * 0.75, ease: 'Elastic.easeOut' }
         ]
     });
+}
 
+/** @param {FloatingDamageCmd} cmd */
+function floatingDamage(cmd) {
+    const { x, y, damage, durationMs } = cmd;
+    const duration = durationMs || 1000;
+
+    // Create text at tile center, anchored at top
+    const text = mainScene.add.text(
+        x * TILE_SIZE + TILE_SIZE / 2,
+        y * TILE_SIZE,
+        `-${damage}`,
+        {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            color: '#ff0000',
+            stroke: '#000000',
+            strokeThickness: 2
+        }
+    );
+    text.setOrigin(0.5, 0);
+    text.setDepth(200);
+
+    // Float downward and fade out (upward reserved for heals)
     mainScene.tweens.add({
-        targets: target,
-        alpha: 0.3,
-        yoyo: true,
-        duration: 80,
-        repeat: 1
+        targets: text,
+        y: text.y + 20,
+        alpha: 0,
+        duration: duration,
+        ease: 'Power1.easeOut',
+        onComplete: () => text.destroy()
     });
 }
 
@@ -294,7 +359,7 @@ function tweenCamera(cmd) {
         scrollY: Math.round(-cmd.y),
         duration: cmd.durationMs,
         ease: cmd.easing || 'Sine.easeOut',
-        onUpdate: (tween, target) => {
+        onUpdate: (_tween, target) => {
             target.scrollX = Math.round(target.scrollX);
             target.scrollY = Math.round(target.scrollY);
         }

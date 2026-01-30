@@ -31,6 +31,8 @@ The solution is divided into three main projects:
   - **Melee**: "Bump" combat triggers when moving into a monster's tile.
   - **Ranged**: `Tab` to cycle targets, `f` to perform a ranged attack.
   - **Visuals**: Health bars and target reticles rendered via Phaser commands.
+  - **Attack Events**: Server tracks `AttackEvent` records (attacker, target, damage, isMelee, position) per tick, broadcast in `WorldSnapshot.AttackEvents`.
+  - **Attack Animations**: Melee attacks trigger bump animation (80% toward target with elastic return). All attacks spawn floating damage numbers that drift downward (upward reserved for heals).
 
 ## 🎨 Frontend & Rendering
 
@@ -65,6 +67,9 @@ return new Input(params)
 - Each stage returns a new type carrying data needed by subsequent stages
 - Keep creation logic inside pipeline steps, not passed in from outside
 - Avoid intermediate variables when a single chain suffices
+
+### Fluent APIs
+Only use fluent/chaining APIs when the output of one call semantically feeds the next (like LINQ or the pipeline pattern above). Don't return `this` just for chaining convenience when operations are independent. If calls are unrelated operations being queued or accumulated, return `void` - it's more honest about what's happening.
 
 ### Strongly-Typed Identifiers
 Use wrapper types for IDs to prevent mixing up different identifier types:
