@@ -152,6 +152,14 @@ public class GameRenderer
             _buffer.SetQueuedPath(entity.Id, pathPoints);
         }
 
+        // Process attack events for animations
+        foreach (var attack in snapshot.AttackEvents)
+        {
+            if (attack.IsMelee) _buffer.BumpAttack(attack.AttackerId, attack.TargetId);
+
+            _buffer.FloatingDamage(attack.TargetPosition.X, attack.TargetPosition.Y, attack.Damage);
+        }
+
         // Camera follows player - send target, Phaser tweens to it
         var player = snapshot.Entities.FirstOrDefault(e => e.Id == playerId);
         if (player != null)

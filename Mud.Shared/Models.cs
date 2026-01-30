@@ -15,6 +15,15 @@ public enum EntityType
 }
 
 [MessagePackObject]
+public record AttackEvent(
+    [property: Key(0)] string AttackerId,
+    [property: Key(1)] string TargetId,
+    [property: Key(2)] int Damage,
+    [property: Key(3)] bool IsMelee,
+    [property: Key(4)] Point TargetPosition
+);
+
+[MessagePackObject]
 public record Entity
 {
     [Key(0)]
@@ -82,4 +91,7 @@ public record WorldSnapshot
 
     [Key(9)]
     public int GhostPadding { get; init; }
+
+    [Key(10)]
+    public List<AttackEvent> AttackEvents { get; init; } = new();
 }

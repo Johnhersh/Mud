@@ -21,6 +21,9 @@ public class GameLoopService : BackgroundService
     private readonly ConcurrentDictionary<PlayerId, PlayerState> _players = new();
     private readonly ConcurrentDictionary<PlayerId, ConcurrentQueue<Direction>> _playerInputQueues = new();
 
+    // Attack events per world (cleared after each broadcast)
+    private readonly ConcurrentDictionary<string, ConcurrentBag<AttackEvent>> _worldAttackEvents = new();
+
     private long _tick = 0;
 
     public GameLoopService(IHubContext<GameHub> hubContext, ILogger<GameLoopService> logger)
@@ -280,7 +283,7 @@ public class GameLoopService : BackgroundService
             var target = world.Entities.Values.FirstOrDefault(e => e.Position == newPos && e.Type == EntityType.Monster);
             if (target != null)
             {
-                ProcessAttack(world, playerEntity.Id, target.Id);
+                ProcessAttack(world, playerEntity.Id, target.Id, isMelee: true);
                 // Clear queue on attack
                 while (queue.TryDequeue(out _)) ;
                 world.UpdateEntity(player with { QueuedPath = new List<Point>() });
@@ -331,13 +334,15 @@ public class GameLoopService : BackgroundService
         }
     }
 
-    public void ProcessAttack(WorldState world, string attackerId, string targetId)
+    public void ProcessAttack(WorldState world, string attackerId, string targetId, bool isMelee)
     {
         var attacker = world.GetEntity(attackerId);
         var target = world.GetEntity(targetId);
         if (attacker == null || target == null) return;
 
         int damage = 10;
+        var targetPosition = target.Position; // Capture before potential removal
+
         var newTarget = target with { Health = target.Health - damage };
 
         if (newTarget.Health <= 0)
@@ -351,6 +356,11 @@ public class GameLoopService : BackgroundService
             _logger.LogInformation("Entity {AttackerId} attacked {TargetId} for {Damage} damage. Health: {Health}",
                 attackerId, targetId, damage, newTarget.Health);
         }
+
+        // Record attack event for client animation
+        var attackEvent = new AttackEvent(attackerId, targetId, damage, isMelee, targetPosition);
+        var attackBag = _worldAttackEvents.GetOrAdd(world.Id, _ => new ConcurrentBag<AttackEvent>());
+        attackBag.Add(attackEvent);
     }
 
     public void ProcessRangedAttack(PlayerId attackerId, string targetId)
@@ -362,7 +372,7 @@ public class GameLoopService : BackgroundService
         if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
             return;
 
-        ProcessAttack(world, attackerId.Value, targetId);
+        ProcessAttack(world, attackerId.Value, targetId, isMelee: false);
     }
 
     private async Task Broadcast()
@@ -376,8 +386,15 @@ public class GameLoopService : BackgroundService
         {
             if (!_worlds.TryGetValue(worldId, out var world)) continue;
 
+            // Get and clear attack events for this world
+            List<AttackEvent>? attackEvents = null;
+            if (_worldAttackEvents.TryRemove(worldId, out var attackBag))
+            {
+                attackEvents = attackBag.ToList();
+            }
+
             // Create snapshot without tiles (for players who already have them)
-            var snapshotWithoutTiles = world.ToSnapshot(_tick, includeTiles: false);
+            var snapshotWithoutTiles = world.ToSnapshot(_tick, includeTiles: false, attackEvents);
             // Create snapshot with tiles (for players who need them)
             WorldSnapshot? snapshotWithTiles = null;
 
@@ -389,7 +406,7 @@ public class GameLoopService : BackgroundService
                 if (needsTiles)
                 {
                     // Lazily create the full snapshot only if needed
-                    snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true);
+                    snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true, attackEvents);
                     _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
                         playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
                     playerState.SentTilesWorldIds.Add(worldId);

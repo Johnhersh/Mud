@@ -31,6 +31,8 @@ The solution is divided into three main projects:
   - **Melee**: "Bump" combat triggers when moving into a monster's tile.
   - **Ranged**: `Tab` to cycle targets, `f` to perform a ranged attack.
   - **Visuals**: Health bars and target reticles rendered via Phaser commands.
+  - **Attack Events**: Server tracks `AttackEvent` records (attacker, target, damage, isMelee, position) per tick, broadcast in `WorldSnapshot.AttackEvents`.
+  - **Attack Animations**: Melee attacks trigger bump animation (80% toward target with elastic return). All attacks spawn floating damage numbers that drift downward (upward reserved for heals).
 
 ## 🎨 Frontend & Rendering
 

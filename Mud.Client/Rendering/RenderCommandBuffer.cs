@@ -45,6 +45,12 @@ public class RenderCommandBuffer
         return this;
     }
 
+    public RenderCommandBuffer FloatingDamage(int x, int y, int damage, int durationMs = 1000)
+    {
+        _commands.Add(new FloatingDamageCommand(x, y, damage, durationMs));
+        return this;
+    }
+
     public RenderCommandBuffer TweenCamera(int x, int y, int durationMs, string easing = "Sine.easeOut")
     {
         _commands.Add(new TweenCameraCommand(x, y, durationMs, easing));

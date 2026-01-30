@@ -47,6 +47,13 @@ public record BumpAttackCommand(
     int DurationMs = 150
 ) : RenderCommand("BumpAttack", null);
 
+public record FloatingDamageCommand(
+    int X,
+    int Y,
+    int Damage,
+    int DurationMs = 1000
+) : RenderCommand("FloatingDamage", null);
+
 // ============ CAMERA ============
 
 public record TweenCameraCommand(

@@ -133,6 +133,7 @@ function executeCommand(cmd) {
         case 'SetVisible': return setVisible(cmd);
         case 'SetDepth': return setDepth(cmd);
         case 'BumpAttack': return bumpAttack(cmd);
+        case 'FloatingDamage': return floatingDamage(cmd);
         case 'TweenCamera': return tweenCamera(cmd);
         case 'SnapCamera': return snapCamera(cmd);
         case 'CreateHealthBar': return createHealthBar(cmd);
@@ -261,28 +262,56 @@ function setDepth(cmd) {
 function bumpAttack(cmd) {
     const attacker = entities.get(cmd.attackerId);
     const target = entities.get(cmd.targetId);
-    if (!attacker || !target) return;
+    if (!attacker) return;
+
+    // Use target position if available, otherwise attacker stays in place
+    const targetX = target ? target.x : attacker.x;
+    const targetY = target ? target.y : attacker.y;
 
     const startX = attacker.x;
     const startY = attacker.y;
-    const bumpX = startX + (target.x - startX) * 0.5;
-    const bumpY = startY + (target.y - startY) * 0.5;
+    // Move 80% toward target (near tile edge) for satisfying "bounce" feel
+    const bumpX = startX + (targetX - startX) * 0.8;
+    const bumpY = startY + (targetY - startY) * 0.8;
     const duration = cmd.durationMs || 150;
 
     mainScene.tweens.chain({
         targets: attacker,
         tweens: [
-            { x: bumpX, y: bumpY, duration: duration / 2, ease: 'Power2' },
-            { x: startX, y: startY, duration: duration / 2, ease: 'Power2' }
+            { x: bumpX, y: bumpY, duration: duration * 0.25, ease: 'Power2.easeOut' },
+            { x: startX, y: startY, duration: duration * 0.75, ease: 'Elastic.easeOut' }
         ]
     });
+}
 
+function floatingDamage(cmd) {
+    const { x, y, damage, durationMs } = cmd;
+    const duration = durationMs || 1000;
+
+    // Create text at tile center, anchored at top
+    const text = mainScene.add.text(
+        x * TILE_SIZE + TILE_SIZE / 2,
+        y * TILE_SIZE,
+        `-${damage}`,
+        {
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            color: '#ff0000',
+            stroke: '#000000',
+            strokeThickness: 2
+        }
+    );
+    text.setOrigin(0.5, 0);
+    text.setDepth(200);
+
+    // Float downward and fade out (upward reserved for heals)
     mainScene.tweens.add({
-        targets: target,
-        alpha: 0.3,
-        yoyo: true,
-        duration: 80,
-        repeat: 1
+        targets: text,
+        y: text.y + 20,
+        alpha: 0,
+        duration: duration,
+        ease: 'Power1.easeOut',
+        onComplete: () => text.destroy()
     });
 }
 

@@ -116,7 +116,8 @@ public class WorldState
     /// </summary>
     /// <param name="tick">Current game tick</param>
     /// <param name="includeTiles">Whether to include tile data (only needed on world change)</param>
-    public WorldSnapshot ToSnapshot(long tick, bool includeTiles = true)
+    /// <param name="attackEvents">Attack events that occurred this tick</param>
+    public WorldSnapshot ToSnapshot(long tick, bool includeTiles = true, List<AttackEvent>? attackEvents = null)
     {
         return new WorldSnapshot
         {
@@ -129,7 +130,8 @@ public class WorldState
             ExitMarker = ExitMarker,
             Width = Terrain.Width,
             Height = Terrain.Height,
-            GhostPadding = Terrain.GhostPadding
+            GhostPadding = Terrain.GhostPadding,
+            AttackEvents = attackEvents ?? new()
         };
     }
 }
