@@ -151,18 +151,12 @@ public class GameLoopService : BackgroundService
         {
             // Check for POI
             var poi = world.GetPOIAt(entity.Position);
-            if (poi != null)
-            {
-                EnterInstance(playerState, poi, world, entity);
-            }
+            if (poi is not null) EnterInstance(playerState, poi, world, entity);
         }
         else // Instance
         {
             // Check for exit
-            if (world.IsExitMarker(entity.Position))
-            {
-                ExitInstance(playerState, world, entity);
-            }
+            if (world.IsExitMarker(entity.Position)) ExitInstance(playerState, world, entity);
         }
     }
 
@@ -338,28 +332,27 @@ public class GameLoopService : BackgroundService
     {
         var attacker = world.GetEntity(attackerId);
         var target = world.GetEntity(targetId);
-        if (attacker == null || target == null) return;
+        if (attacker is null || target is null) return;
 
         int damage = 10;
-        var targetPosition = target.Position; // Capture before potential removal
+        var targetPosition = target.Position;
+        var newHealth = target.Health - damage;
 
-        var newTarget = target with { Health = target.Health - damage };
-
-        if (newTarget.Health <= 0)
+        if (newHealth <= 0)
         {
             world.RemoveEntity(targetId);
             _logger.LogInformation("Entity {TargetId} died", targetId);
         }
         else
         {
-            world.UpdateEntity(newTarget);
+            world.UpdateEntity(target with { Health = newHealth });
             _logger.LogInformation("Entity {AttackerId} attacked {TargetId} for {Damage} damage. Health: {Health}",
-                attackerId, targetId, damage, newTarget.Health);
+                attackerId, targetId, damage, newHealth);
         }
 
         // Record attack event for client animation
         var attackEvent = new AttackEvent(attackerId, targetId, damage, isMelee, targetPosition);
-        var attackBag = _worldAttackEvents.GetOrAdd(world.Id, _ => new ConcurrentBag<AttackEvent>());
+        var attackBag = _worldAttackEvents.GetOrAdd(world.Id, _ => []);
         attackBag.Add(attackEvent);
     }
 
@@ -387,11 +380,9 @@ public class GameLoopService : BackgroundService
             if (!_worlds.TryGetValue(worldId, out var world)) continue;
 
             // Get and clear attack events for this world
-            List<AttackEvent>? attackEvents = null;
-            if (_worldAttackEvents.TryRemove(worldId, out var attackBag))
-            {
-                attackEvents = attackBag.ToList();
-            }
+            var attackEvents = _worldAttackEvents.TryRemove(worldId, out var attackBag)
+                ? attackBag.ToList()
+                : [];
 
             // Create snapshot without tiles (for players who already have them)
             var snapshotWithoutTiles = world.ToSnapshot(_tick, includeTiles: false, attackEvents);
