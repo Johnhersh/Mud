@@ -13,98 +13,50 @@ public class RenderCommandBuffer
 
     public RenderCommandBuffer(IJSRuntime js) => _js = js;
 
-    // ============ FLUENT API ============
+    // ============ COMMAND QUEUEING ============
 
-    public RenderCommandBuffer CreateSprite(string id, int tileIndex, int x, int y, uint? tint = null, int? depth = null)
-    {
-        _commands.Add(new CreateSpriteCommand(id, tileIndex, x, y, tint, depth));
-        return this;
-    }
+    public void CreateSprite(string id, int tileIndex, int x, int y, uint? tint = null, int? depth = null)
+        => _commands.Add(new CreateSpriteCommand(id, tileIndex, x, y, tint, depth));
 
-    public RenderCommandBuffer DestroySprite(string id)
-    {
-        _commands.Add(new DestroySpriteCommand(id));
-        return this;
-    }
+    public void DestroySprite(string id)
+        => _commands.Add(new DestroySpriteCommand(id));
 
-    public RenderCommandBuffer SetPosition(string id, int x, int y)
-    {
-        _commands.Add(new SetPositionCommand(id, x, y));
-        return this;
-    }
+    public void SetPosition(string id, int x, int y)
+        => _commands.Add(new SetPositionCommand(id, x, y));
 
-    public RenderCommandBuffer TweenTo(string id, int x, int y, int durationMs = 300, string easing = "Sine.easeInOut")
-    {
-        _commands.Add(new TweenToCommand(id, x, y, durationMs, easing));
-        return this;
-    }
+    public void TweenTo(string id, int x, int y, int durationMs = 300, string easing = "Sine.easeInOut")
+        => _commands.Add(new TweenToCommand(id, x, y, durationMs, easing));
 
-    public RenderCommandBuffer BumpAttack(string attackerId, string targetId, int durationMs = 150)
-    {
-        _commands.Add(new BumpAttackCommand(attackerId, targetId, durationMs));
-        return this;
-    }
+    public void BumpAttack(string attackerId, string targetId, int durationMs = 150)
+        => _commands.Add(new BumpAttackCommand(attackerId, targetId, durationMs));
 
-    public RenderCommandBuffer FloatingDamage(int x, int y, int damage, int durationMs = 1000)
-    {
-        _commands.Add(new FloatingDamageCommand(x, y, damage, durationMs));
-        return this;
-    }
+    public void FloatingDamage(int x, int y, int damage, int durationMs = 1000)
+        => _commands.Add(new FloatingDamageCommand(x, y, damage, durationMs));
 
-    public RenderCommandBuffer TweenCamera(int x, int y, int durationMs, string easing = "Sine.easeOut")
-    {
-        _commands.Add(new TweenCameraCommand(x, y, durationMs, easing));
-        return this;
-    }
+    public void TweenCamera(int x, int y, int durationMs, string easing = "Sine.easeOut")
+        => _commands.Add(new TweenCameraCommand(x, y, durationMs, easing));
 
-    public RenderCommandBuffer SnapCamera(int x, int y)
-    {
-        _commands.Add(new SnapCameraCommand(x, y));
-        return this;
-    }
+    public void SnapCamera(int x, int y)
+        => _commands.Add(new SnapCameraCommand(x, y));
 
-    public RenderCommandBuffer CreateHealthBar(string entityId, int maxHealth, int currentHealth)
-    {
-        _commands.Add(new CreateHealthBarCommand(entityId, maxHealth, currentHealth));
-        return this;
-    }
+    public void CreateHealthBar(string entityId, int maxHealth, int currentHealth)
+        => _commands.Add(new CreateHealthBarCommand(entityId, maxHealth, currentHealth));
 
-    public RenderCommandBuffer UpdateHealthBar(string entityId, int currentHealth)
-    {
-        _commands.Add(new UpdateHealthBarCommand(entityId, currentHealth));
-        return this;
-    }
+    public void UpdateHealthBar(string entityId, int currentHealth)
+        => _commands.Add(new UpdateHealthBarCommand(entityId, currentHealth));
 
-    public RenderCommandBuffer SetTerrain(string worldId, List<TileRenderData> tiles, int width, int height, int ghostPadding, bool isInstance)
-    {
-        _commands.Add(new SetTerrainCommand(worldId, tiles, width, height, ghostPadding, isInstance));
-        return this;
-    }
+    public void SetTerrain(string worldId, List<TileRenderData> tiles, int width, int height, int ghostPadding, bool isInstance)
+        => _commands.Add(new SetTerrainCommand(worldId, tiles, width, height, ghostPadding, isInstance));
 
-    public RenderCommandBuffer SwitchTerrainLayer(bool isInstance)
-    {
-        _commands.Add(new SwitchTerrainLayerCommand(isInstance));
-        return this;
-    }
+    public void SwitchTerrainLayer(bool isInstance)
+        => _commands.Add(new SwitchTerrainLayerCommand(isInstance));
 
-    public RenderCommandBuffer SetQueuedPath(string entityId, List<PathPoint> path)
-    {
-        _commands.Add(new SetQueuedPathCommand(entityId, path));
-        return this;
-    }
-
-    public RenderCommandBuffer SetTargetReticle(string? entityId)
-    {
-        _commands.Add(new SetTargetReticleCommand(entityId));
-        return this;
-    }
+    public void SetQueuedPath(string entityId, List<PathPoint> path)
+        => _commands.Add(new SetQueuedPathCommand(entityId, path));
 
     // ============ EXECUTION ============
 
-    /// <summary>
-    /// Flushes all commands to JavaScript with a single interop call.
-    /// </summary>
-    public async ValueTask FlushAsync()
+    public async ValueTask FlushToGameJS()
     {
         if (_commands.Count == 0) return;
 

@@ -68,6 +68,9 @@ return new Input(params)
 - Keep creation logic inside pipeline steps, not passed in from outside
 - Avoid intermediate variables when a single chain suffices
 
+### Fluent APIs
+Only use fluent/chaining APIs when the output of one call semantically feeds the next (like LINQ or the pipeline pattern above). Don't return `this` just for chaining convenience when operations are independent. If calls are unrelated operations being queued or accumulated, return `void` - it's more honest about what's happening.
+
 ### Strongly-Typed Identifiers
 Use wrapper types for IDs to prevent mixing up different identifier types:
 ```csharp

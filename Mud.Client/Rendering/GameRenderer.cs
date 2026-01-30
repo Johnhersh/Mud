@@ -13,8 +13,6 @@ public class GameRenderer
     private readonly Dictionary<string, EntityRenderState> _entities = new();
     private readonly HashSet<string> _staticSprites = new();  // POIs, exit markers, etc.
     private string? _currentWorldId;
-    private string? _targetEntityId;
-    private string? _myPlayerId;
     private bool _cameraInitialized;
     private bool _worldJustChanged;
 
@@ -46,13 +44,11 @@ public class GameRenderer
     }
 
     /// <summary>
-    /// Processes a world snapshot and generates render commands.
+    /// Processes a world snapshot, generates render commands, and flushes to JS.
     /// Called on server ticks (~3/second), not every frame.
     /// </summary>
-    public void ProcessSnapshot(WorldSnapshot snapshot, string? targetId, string playerId)
+    public async ValueTask ProcessSnapshot(WorldSnapshot snapshot, string playerId)
     {
-        _myPlayerId = playerId;
-
         // Detect world change (for camera/entity snap behavior)
         bool isInstance = snapshot.WorldType == WorldType.Instance;
         if (snapshot.WorldId != _currentWorldId)
@@ -181,13 +177,6 @@ public class GameRenderer
             }
         }
 
-        // Targeting reticle
-        if (targetId != _targetEntityId)
-        {
-            _buffer.SetTargetReticle(targetId);
-            _targetEntityId = targetId;
-        }
-
         // POIs (rendered as terrain sprites with specific tiles)
         if (snapshot.POIs != null && snapshot.POIs.Count > 0)
         {
@@ -199,6 +188,8 @@ public class GameRenderer
         {
             ProcessExitMarker(snapshot.ExitMarker);
         }
+
+        await _buffer.FlushToGameJS();
     }
 
     private void ProcessPOIs(List<POI> pois)
@@ -230,9 +221,4 @@ public class GameRenderer
             _staticSprites.Add(spriteId);
         }
     }
-
-    /// <summary>
-    /// Flushes all pending commands to JavaScript.
-    /// </summary>
-    public async ValueTask FlushAsync() => await _buffer.FlushAsync();
 }
