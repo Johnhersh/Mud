@@ -28,3 +28,6 @@ dist/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Playwright MCP
+.playwright-mcp
