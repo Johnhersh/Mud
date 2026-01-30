@@ -1,5 +1,33 @@
 // phaser-renderer.js - Thin command executor for Phaser 4
 
+// ============ COMMAND TYPE DEFINITIONS ============
+// IMPORTANT: These types mirror RenderCommandType enum and command records in
+// Mud.Client/Rendering/RenderCommand.cs. Any changes there must be reflected here.
+
+/**
+ * @typedef {'CreateSprite'|'DestroySprite'|'SetPosition'|'SetTint'|'SetVisible'|'SetDepth'|'TweenTo'|'BumpAttack'|'FloatingDamage'|'TweenCamera'|'SnapCamera'|'CreateHealthBar'|'UpdateHealthBar'|'SetTerrain'|'SwitchTerrainLayer'|'SetQueuedPath'|'SetTargetReticle'} RenderCommandType
+ */
+
+/** @typedef {{ type: 'CreateSprite', entityId: string, tileIndex: number, x: number, y: number, tint?: number, depth?: number }} CreateSpriteCmd */
+/** @typedef {{ type: 'DestroySprite', entityId: string }} DestroySpriteCmd */
+/** @typedef {{ type: 'SetPosition', entityId: string, x: number, y: number }} SetPositionCmd */
+/** @typedef {{ type: 'SetTint', entityId: string, tint: number }} SetTintCmd */
+/** @typedef {{ type: 'SetVisible', entityId: string, visible: boolean }} SetVisibleCmd */
+/** @typedef {{ type: 'SetDepth', entityId: string, depth: number }} SetDepthCmd */
+/** @typedef {{ type: 'TweenTo', entityId: string, x: number, y: number, durationMs?: number, easing?: string }} TweenToCmd */
+/** @typedef {{ type: 'BumpAttack', attackerId: string, targetId: string, durationMs?: number }} BumpAttackCmd */
+/** @typedef {{ type: 'FloatingDamage', x: number, y: number, damage: number, durationMs?: number }} FloatingDamageCmd */
+/** @typedef {{ type: 'TweenCamera', x: number, y: number, durationMs: number, easing?: string }} TweenCameraCmd */
+/** @typedef {{ type: 'SnapCamera', x: number, y: number }} SnapCameraCmd */
+/** @typedef {{ type: 'CreateHealthBar', entityId: string, maxHealth: number, currentHealth: number }} CreateHealthBarCmd */
+/** @typedef {{ type: 'UpdateHealthBar', entityId: string, currentHealth: number }} UpdateHealthBarCmd */
+/** @typedef {{ type: 'SetTerrain', worldId: string, tiles: {type: number}[], width: number, height: number, ghostPadding: number, isInstance: boolean }} SetTerrainCmd */
+/** @typedef {{ type: 'SwitchTerrainLayer', isInstance: boolean }} SwitchTerrainLayerCmd */
+/** @typedef {{ type: 'SetQueuedPath', entityId: string, path: {x: number, y: number}[] }} SetQueuedPathCmd */
+/** @typedef {{ type: 'SetTargetReticle', entityId: string|null }} SetTargetReticleCmd */
+
+/** @typedef {CreateSpriteCmd|DestroySpriteCmd|SetPositionCmd|SetTintCmd|SetVisibleCmd|SetDepthCmd|TweenToCmd|BumpAttackCmd|FloatingDamageCmd|TweenCameraCmd|SnapCameraCmd|CreateHealthBarCmd|UpdateHealthBarCmd|SetTerrainCmd|SwitchTerrainLayerCmd|SetQueuedPathCmd|SetTargetReticleCmd} RenderCommand */
+
 let game = null;
 let mainScene = null;
 const entities = new Map();
@@ -108,6 +136,9 @@ function createTerrainPool(count, container) {
 
 // ============ COMMAND DISPATCHER ============
 
+/**
+ * @param {RenderCommand[]} commands
+ */
 window.executeCommands = function(commands) {
     if (!mainScene) {
         console.warn('Scene not ready, dropping', commands.length, 'commands');
@@ -123,6 +154,9 @@ window.executeCommands = function(commands) {
     }
 };
 
+/**
+ * @param {RenderCommand} cmd
+ */
 function executeCommand(cmd) {
     switch (cmd.type) {
         case 'CreateSprite': return createSprite(cmd);
@@ -149,12 +183,11 @@ function executeCommand(cmd) {
 
 // ============ COMMAND IMPLEMENTATIONS ============
 
+/** @param {CreateSpriteCmd} cmd */
 function createSprite(cmd) {
     const { entityId, tileIndex, x, y, tint, depth } = cmd;
 
-    if (entities.has(entityId)) {
-        return;
-    }
+    if (entities.has(entityId)) return;
 
     const sprite = mainScene.add.sprite(
         x * TILE_SIZE,
@@ -175,6 +208,7 @@ function createSprite(cmd) {
     entities.set(entityId, sprite);
 }
 
+/** @param {DestroySpriteCmd} cmd */
 function destroySprite(cmd) {
     const sprite = entities.get(cmd.entityId);
     if (sprite) {
@@ -259,6 +293,7 @@ function setDepth(cmd) {
     }
 }
 
+/** @param {BumpAttackCmd} cmd */
 function bumpAttack(cmd) {
     const attacker = entities.get(cmd.attackerId);
     const target = entities.get(cmd.targetId);
@@ -284,6 +319,7 @@ function bumpAttack(cmd) {
     });
 }
 
+/** @param {FloatingDamageCmd} cmd */
 function floatingDamage(cmd) {
     const { x, y, damage, durationMs } = cmd;
     const duration = durationMs || 1000;
@@ -323,7 +359,7 @@ function tweenCamera(cmd) {
         scrollY: Math.round(-cmd.y),
         duration: cmd.durationMs,
         ease: cmd.easing || 'Sine.easeOut',
-        onUpdate: (tween, target) => {
+        onUpdate: (_tween, target) => {
             target.scrollX = Math.round(target.scrollX);
             target.scrollY = Math.round(target.scrollY);
         }
