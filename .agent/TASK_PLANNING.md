@@ -107,3 +107,67 @@ Each task should be a standalone document in `.agent/tasks/` containing:
 - **Technical Decisions**: Key decisions made during planning and their rationale.
 - **Implementation Considerations**: Performance, latency, and synchronization notes.
 - **Files to Modify**: Explicit list of files and the nature of changes.
+- **How to Test**: Step-by-step instructions for visual testing (see below).
+
+### How to Test Section
+
+Every task document should include a "How to Test" section that tells the implementing agent how to verify the feature works. This section should include:
+
+1. **Test instructions** for the `playwright-tester` agent
+2. **The Task tool call** to spawn the testing agent
+
+Template:
+
+```markdown
+## How to Test
+
+After implementation is complete, spawn the `playwright-tester` agent:
+
+\`\`\`
+Task(
+  subagent_type: "playwright-tester",
+  description: "Test [feature name]",
+  prompt: """
+  **Feature:** [One-line description]
+
+  **Test Steps:**
+  1. [Action] → [Expected result]
+  2. [Action] → [Expected result]
+  ...
+
+  **Visual Verification:**
+  - [What should appear on screen]
+  - [What the screenshot should show]
+  """
+)
+\`\`\`
+```
+
+Example:
+
+```markdown
+## How to Test
+
+After implementation is complete, spawn the `playwright-tester` agent:
+
+\`\`\`
+Task(
+  subagent_type: "playwright-tester",
+  description: "Test XP gain feature",
+  prompt: """
+  **Feature:** XP gain from killing monsters
+
+  **Test Steps:**
+  1. Press Enter → Should transition to town instance
+  2. Press Tab → Should target a monster (reticle appears)
+  3. Press f (5x with 1s delays) → Monster takes damage, eventually dies
+  4. Wait 1 second → "+25 XP" floating text should appear
+
+  **Visual Verification:**
+  - Green floating text "+25 XP" drifts upward from monster death location
+  - Text fades out over ~1 second
+  - No JavaScript errors in console
+  """
+)
+\`\`\`
+```

@@ -5,11 +5,15 @@
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
+	"mounts": [
+		"source=claude-config,target=/home/vscode/.claude,type=volume"
+	],
 	"features": {
 		"ghcr.io/devcontainers/features/node:1": {},
 		"ghcr.io/schlich/devcontainer-features/playwright:0": {
 			"version": "latest",
-			"install-deps": true
+			"install-deps": true,
+			"browsers": "chromium"
 		}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.

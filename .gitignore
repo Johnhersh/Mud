@@ -28,6 +28,3 @@ dist/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# Claude Code
-.claude/

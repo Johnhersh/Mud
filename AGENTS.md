@@ -17,7 +17,8 @@ The solution is divided into three main projects:
 - **Run Server**: `dotnet run --project Mud.Server` (This also hosts the Blazor client)
 
 ### Testing
-- **Run Tests**: `dotnet test` (Note: No tests are currently implemented in the prototype)
+- **Run Tests**: `dotnet test` (Note: No unit tests are currently implemented)
+- **Visual Testing**: Use Playwright via MCP to verify features work in the browser (see `.agent/TESTING_AGENT.md`)
 
 ## 📡 Networking & Serialization
 
