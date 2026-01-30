@@ -24,6 +24,12 @@ public class GameLoopService : BackgroundService
     // Attack events per world (cleared after each broadcast)
     private readonly ConcurrentDictionary<string, ConcurrentBag<AttackEvent>> _worldAttackEvents = new();
 
+    // XP events: keyed by world, then by player (for per-player sends)
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, List<XpGainEvent>>> _worldPlayerXpEvents = new();
+
+    // Level-up events: keyed by world only (broadcast to all in world)
+    private readonly ConcurrentDictionary<string, ConcurrentBag<LevelUpEvent>> _worldLevelUpEvents = new();
+
     private long _tick = 0;
 
     public GameLoopService(IHubContext<GameHub> hubContext, ILogger<GameLoopService> logger)
@@ -83,15 +89,22 @@ public class GameLoopService : BackgroundService
         };
         _players[playerId] = playerState;
 
-        // Create player entity in overworld
+        // Create player entity in overworld with initial stats
+        var initialMaxHealth = ProgressionFormulas.MaxHealth(ProgressionFormulas.BaseStamina);
         var entity = new Entity
         {
             Id = playerId.Value,
             Name = name,
             Position = spawnPos,
             Type = EntityType.Player,
-            Health = 100,
-            MaxHealth = 100
+            Health = initialMaxHealth,
+            MaxHealth = initialMaxHealth,
+            Level = 1,
+            Experience = 0,
+            Strength = ProgressionFormulas.BaseStrength,
+            Dexterity = ProgressionFormulas.BaseDexterity,
+            Stamina = ProgressionFormulas.BaseStamina,
+            UnspentPoints = 0
         };
         _overworld.AddEntity(entity);
         _logger.LogInformation("Player {Name} joined at {Position}", name, spawnPos);
@@ -280,7 +293,12 @@ public class GameLoopService : BackgroundService
                 ProcessAttack(world, playerEntity.Id, target.Id, isMelee: true);
                 // Clear queue on attack
                 while (queue.TryDequeue(out _)) ;
-                world.UpdateEntity(player with { QueuedPath = new List<Point>() });
+                // Re-fetch player after ProcessAttack since it may have been updated with XP
+                var updatedPlayer = world.GetEntity(playerEntity.Id);
+                if (updatedPlayer != null)
+                {
+                    world.UpdateEntity(updatedPlayer with { QueuedPath = new List<Point>() });
+                }
                 continue;
             }
 
@@ -334,7 +352,11 @@ public class GameLoopService : BackgroundService
         var target = world.GetEntity(targetId);
         if (attacker is null || target is null) return;
 
-        int damage = 10;
+        // Calculate damage from attributes
+        int damage = isMelee
+            ? ProgressionFormulas.MeleeDamage(attacker.Strength)
+            : ProgressionFormulas.RangedDamage(attacker.Dexterity);
+
         var targetPosition = target.Position;
         var newHealth = target.Health - damage;
 
@@ -342,6 +364,12 @@ public class GameLoopService : BackgroundService
         {
             world.RemoveEntity(targetId);
             _logger.LogInformation("Entity {TargetId} died", targetId);
+
+            // Award XP to all players in this instance if a monster was killed
+            if (target.Type == EntityType.Monster && attacker.Type == EntityType.Player)
+            {
+                AwardXpToInstance(world, targetPosition);
+            }
         }
         else
         {
@@ -368,6 +396,139 @@ public class GameLoopService : BackgroundService
         ProcessAttack(world, attackerId.Value, targetId, isMelee: false);
     }
 
+    private void AwardXpToInstance(WorldState world, Point killedPosition)
+    {
+        var players = world.GetPlayers().ToList();
+
+        foreach (var player in players)
+        {
+            // Skip players at max level
+            if (player.Level >= ProgressionFormulas.MaxLevel) continue;
+
+            var newXp = player.Experience + ProgressionFormulas.XpPerKill;
+            var newLevel = player.Level;
+            var newUnspent = player.UnspentPoints;
+            var newHealth = player.Health;
+            var leveledUp = false;
+
+            // Check for level up(s) - loop handles multiple level-ups from large XP gains
+            while (newLevel < ProgressionFormulas.MaxLevel &&
+                   newXp >= ProgressionFormulas.ExperienceForLevel(newLevel + 1))
+            {
+                newLevel++;
+                newUnspent += ProgressionFormulas.PointsPerLevel;
+                leveledUp = true;
+            }
+
+            // Cap XP at max level threshold
+            if (newLevel >= ProgressionFormulas.MaxLevel)
+            {
+                newXp = ProgressionFormulas.ExperienceForLevel(ProgressionFormulas.MaxLevel);
+            }
+
+            // Full heal on level up
+            if (leveledUp)
+            {
+                newHealth = ProgressionFormulas.MaxHealth(player.Stamina);
+                RecordLevelUpEvent(world.Id, player.Id, newLevel, player.Position);
+                _logger.LogInformation("Player {PlayerId} leveled up to {Level}", player.Id, newLevel);
+            }
+
+            // Record XP gain event for this player
+            RecordXpGainEvent(world.Id, player.Id, ProgressionFormulas.XpPerKill, killedPosition);
+
+            world.UpdateEntity(player with
+            {
+                Experience = newXp,
+                Level = newLevel,
+                UnspentPoints = newUnspent,
+                Health = newHealth,
+                MaxHealth = ProgressionFormulas.MaxHealth(player.Stamina)
+            });
+        }
+    }
+
+    private void RecordXpGainEvent(string worldId, string playerId, int amount, Point position)
+    {
+        var playerXpEvents = _worldPlayerXpEvents.GetOrAdd(worldId, _ => new ConcurrentDictionary<string, List<XpGainEvent>>());
+        var xpList = playerXpEvents.GetOrAdd(playerId, _ => []);
+        lock (xpList)
+        {
+            xpList.Add(new XpGainEvent(amount, position));
+        }
+    }
+
+    private void RecordLevelUpEvent(string worldId, string playerId, int newLevel, Point position)
+    {
+        var levelUpBag = _worldLevelUpEvents.GetOrAdd(worldId, _ => []);
+        levelUpBag.Add(new LevelUpEvent(playerId, newLevel, position));
+    }
+
+    public void AllocateStat(PlayerId playerId, string statName)
+    {
+        var (world, player) = FindPlayer(playerId);
+        if (world == null || player == null) return;
+        if (player.UnspentPoints <= 0) return;
+
+        var updated = statName.ToLowerInvariant() switch
+        {
+            "strength" => player with
+            {
+                Strength = player.Strength + 1,
+                UnspentPoints = player.UnspentPoints - 1
+            },
+            "dexterity" => player with
+            {
+                Dexterity = player.Dexterity + 1,
+                UnspentPoints = player.UnspentPoints - 1
+            },
+            "stamina" => AllocateStamina(player),
+            _ => player
+        };
+
+        if (updated != player)
+        {
+            world.UpdateEntity(updated);
+            _logger.LogInformation("Player {PlayerId} allocated point to {Stat}. New value: {Value}",
+                playerId, statName, GetStatValue(updated, statName));
+        }
+    }
+
+    private static Entity AllocateStamina(Entity player)
+    {
+        var newStamina = player.Stamina + 1;
+        var newMaxHealth = ProgressionFormulas.MaxHealth(newStamina);
+        var healthIncrease = ProgressionFormulas.HealthPerStamina;
+
+        return player with
+        {
+            Stamina = newStamina,
+            MaxHealth = newMaxHealth,
+            Health = player.Health + healthIncrease,
+            UnspentPoints = player.UnspentPoints - 1
+        };
+    }
+
+    private static int GetStatValue(Entity entity, string statName) => statName.ToLowerInvariant() switch
+    {
+        "strength" => entity.Strength,
+        "dexterity" => entity.Dexterity,
+        "stamina" => entity.Stamina,
+        _ => 0
+    };
+
+    private (WorldState? world, Entity? player) FindPlayer(PlayerId playerId)
+    {
+        if (!_players.TryGetValue(playerId, out var playerState))
+            return (null, null);
+
+        if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+            return (null, null);
+
+        var entity = world.GetEntity(playerId.Value);
+        return (world, entity);
+    }
+
     private async Task Broadcast()
     {
         // Group players by world and send world-specific snapshots
@@ -384,8 +545,13 @@ public class GameLoopService : BackgroundService
                 ? attackBag.ToList()
                 : [];
 
+            // Get and clear level-up events for this world
+            var levelUpEvents = _worldLevelUpEvents.TryRemove(worldId, out var levelUpBag)
+                ? levelUpBag.ToList()
+                : [];
+
             // Create snapshot without tiles (for players who already have them)
-            var snapshotWithoutTiles = world.ToSnapshot(_tick, includeTiles: false, attackEvents);
+            var snapshotWithoutTiles = world.ToSnapshot(_tick, includeTiles: false, attackEvents, levelUpEvents);
             // Create snapshot with tiles (for players who need them)
             WorldSnapshot? snapshotWithTiles = null;
 
@@ -397,7 +563,7 @@ public class GameLoopService : BackgroundService
                 if (needsTiles)
                 {
                     // Lazily create the full snapshot only if needed
-                    snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true, attackEvents);
+                    snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true, attackEvents, levelUpEvents);
                     _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
                         playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
                     playerState.SentTilesWorldIds.Add(worldId);
@@ -407,7 +573,29 @@ public class GameLoopService : BackgroundService
                 {
                     await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithoutTiles);
                 }
+
+                // Send XP events individually to this player
+                await SendXpEventsToPlayer(worldId, playerState.Id.Value);
             }
+
+            // Clear XP events for this world after sending
+            _worldPlayerXpEvents.TryRemove(worldId, out _);
         }
+    }
+
+    private async Task SendXpEventsToPlayer(string worldId, string playerId)
+    {
+        if (!_worldPlayerXpEvents.TryGetValue(worldId, out var playerXpEvents)) return;
+        if (!playerXpEvents.TryGetValue(playerId, out var xpEvents)) return;
+
+        List<XpGainEvent> eventsToSend;
+        lock (xpEvents)
+        {
+            if (xpEvents.Count == 0) return;
+            eventsToSend = [.. xpEvents];
+            xpEvents.Clear();
+        }
+
+        await _hubContext.Clients.Client(playerId).SendAsync("OnXpGain", eventsToSend);
     }
 }

@@ -32,4 +32,7 @@ public class GameHub : Hub
 
     public void Interact() =>
         _gameLoop.Interact(PlayerId);
+
+    public void AllocateStat(string statName) =>
+        _gameLoop.AllocateStat(PlayerId, statName);
 }

@@ -21,7 +21,7 @@ public enum RenderCommandType
     // Movement/Animation
     TweenTo,
     BumpAttack,
-    FloatingDamage,
+    FloatingText,
 
     // Camera
     TweenCamera,
@@ -30,6 +30,7 @@ public enum RenderCommandType
     // Health bars
     CreateHealthBar,
     UpdateHealthBar,
+    UpdateLevelDisplay,
 
     // Terrain
     SetTerrain,
@@ -89,12 +90,17 @@ public record BumpAttackCommand(
     int DurationMs = 150
 ) : RenderCommand(RenderCommandType.BumpAttack, null);
 
-public record FloatingDamageCommand(
+/// <summary>
+/// Generalized floating text - used for damage, XP gains, level ups, etc.
+/// </summary>
+public record FloatingTextCommand(
     int X,
     int Y,
-    int Damage,
+    string Text,
+    string Color,      // Hex color e.g. "#ff0000"
+    int OffsetY,       // Positive = down, negative = up
     int DurationMs = 1000
-) : RenderCommand(RenderCommandType.FloatingDamage, null);
+) : RenderCommand(RenderCommandType.FloatingText, null);
 
 // ============ CAMERA ============
 
@@ -113,11 +119,15 @@ public record SnapCameraCommand(int X, int Y)
 public record CreateHealthBarCommand(
     string EntityId,
     int MaxHealth,
-    int CurrentHealth
+    int CurrentHealth,
+    int Level = 1
 ) : RenderCommand(RenderCommandType.CreateHealthBar, EntityId);
 
 public record UpdateHealthBarCommand(string EntityId, int CurrentHealth)
     : RenderCommand(RenderCommandType.UpdateHealthBar, EntityId);
+
+public record UpdateLevelDisplayCommand(string EntityId, int Level)
+    : RenderCommand(RenderCommandType.UpdateLevelDisplay, EntityId);
 
 // ============ TERRAIN ============
 

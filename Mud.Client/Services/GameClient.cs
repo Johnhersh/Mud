@@ -8,6 +8,7 @@ public class GameClient : IAsyncDisposable
 {
     private readonly HubConnection _hubConnection;
     public event Action<WorldSnapshot>? OnWorldUpdate;
+    public event Action<List<XpGainEvent>>? OnXpGain;
 
     public GameClient(string baseUri)
     {
@@ -20,6 +21,11 @@ public class GameClient : IAsyncDisposable
         _hubConnection.On<WorldSnapshot>("OnWorldUpdate", snapshot =>
         {
             OnWorldUpdate?.Invoke(snapshot);
+        });
+
+        _hubConnection.On<List<XpGainEvent>>("OnXpGain", xpEvents =>
+        {
+            OnXpGain?.Invoke(xpEvents);
         });
     }
 
@@ -48,6 +54,11 @@ public class GameClient : IAsyncDisposable
     public async Task InteractAsync()
     {
         await _hubConnection.SendAsync("Interact");
+    }
+
+    public async Task AllocateStatAsync(string statName)
+    {
+        await _hubConnection.SendAsync("AllocateStat", statName);
     }
 
     public async ValueTask DisposeAsync()

@@ -5,7 +5,7 @@
 // Mud.Client/Rendering/RenderCommand.cs. Any changes there must be reflected here.
 
 /**
- * @typedef {'CreateSprite'|'DestroySprite'|'SetPosition'|'SetTint'|'SetVisible'|'SetDepth'|'TweenTo'|'BumpAttack'|'FloatingDamage'|'TweenCamera'|'SnapCamera'|'CreateHealthBar'|'UpdateHealthBar'|'SetTerrain'|'SwitchTerrainLayer'|'SetQueuedPath'|'SetTargetReticle'} RenderCommandType
+ * @typedef {'CreateSprite'|'DestroySprite'|'SetPosition'|'SetTint'|'SetVisible'|'SetDepth'|'TweenTo'|'BumpAttack'|'FloatingText'|'TweenCamera'|'SnapCamera'|'CreateHealthBar'|'UpdateHealthBar'|'UpdateLevelDisplay'|'SetTerrain'|'SwitchTerrainLayer'|'SetQueuedPath'|'SetTargetReticle'} RenderCommandType
  */
 
 /** @typedef {{ type: 'CreateSprite', entityId: string, tileIndex: number, x: number, y: number, tint?: number, depth?: number }} CreateSpriteCmd */
@@ -16,17 +16,18 @@
 /** @typedef {{ type: 'SetDepth', entityId: string, depth: number }} SetDepthCmd */
 /** @typedef {{ type: 'TweenTo', entityId: string, x: number, y: number, durationMs?: number, easing?: string }} TweenToCmd */
 /** @typedef {{ type: 'BumpAttack', attackerId: string, targetId: string, durationMs?: number }} BumpAttackCmd */
-/** @typedef {{ type: 'FloatingDamage', x: number, y: number, damage: number, durationMs?: number }} FloatingDamageCmd */
+/** @typedef {{ type: 'FloatingText', x: number, y: number, text: string, color: string, offsetY: number, durationMs?: number }} FloatingTextCmd */
 /** @typedef {{ type: 'TweenCamera', x: number, y: number, durationMs: number, easing?: string }} TweenCameraCmd */
 /** @typedef {{ type: 'SnapCamera', x: number, y: number }} SnapCameraCmd */
-/** @typedef {{ type: 'CreateHealthBar', entityId: string, maxHealth: number, currentHealth: number }} CreateHealthBarCmd */
+/** @typedef {{ type: 'CreateHealthBar', entityId: string, maxHealth: number, currentHealth: number, level?: number }} CreateHealthBarCmd */
 /** @typedef {{ type: 'UpdateHealthBar', entityId: string, currentHealth: number }} UpdateHealthBarCmd */
+/** @typedef {{ type: 'UpdateLevelDisplay', entityId: string, level: number }} UpdateLevelDisplayCmd */
 /** @typedef {{ type: 'SetTerrain', worldId: string, tiles: {type: number}[], width: number, height: number, ghostPadding: number, isInstance: boolean }} SetTerrainCmd */
 /** @typedef {{ type: 'SwitchTerrainLayer', isInstance: boolean }} SwitchTerrainLayerCmd */
 /** @typedef {{ type: 'SetQueuedPath', entityId: string, path: {x: number, y: number}[] }} SetQueuedPathCmd */
 /** @typedef {{ type: 'SetTargetReticle', entityId: string|null }} SetTargetReticleCmd */
 
-/** @typedef {CreateSpriteCmd|DestroySpriteCmd|SetPositionCmd|SetTintCmd|SetVisibleCmd|SetDepthCmd|TweenToCmd|BumpAttackCmd|FloatingDamageCmd|TweenCameraCmd|SnapCameraCmd|CreateHealthBarCmd|UpdateHealthBarCmd|SetTerrainCmd|SwitchTerrainLayerCmd|SetQueuedPathCmd|SetTargetReticleCmd} RenderCommand */
+/** @typedef {CreateSpriteCmd|DestroySpriteCmd|SetPositionCmd|SetTintCmd|SetVisibleCmd|SetDepthCmd|TweenToCmd|BumpAttackCmd|FloatingTextCmd|TweenCameraCmd|SnapCameraCmd|CreateHealthBarCmd|UpdateHealthBarCmd|UpdateLevelDisplayCmd|SetTerrainCmd|SwitchTerrainLayerCmd|SetQueuedPathCmd|SetTargetReticleCmd} RenderCommand */
 
 let game = null;
 let mainScene = null;
@@ -167,11 +168,12 @@ function executeCommand(cmd) {
         case 'SetVisible': return setVisible(cmd);
         case 'SetDepth': return setDepth(cmd);
         case 'BumpAttack': return bumpAttack(cmd);
-        case 'FloatingDamage': return floatingDamage(cmd);
+        case 'FloatingText': return floatingText(cmd);
         case 'TweenCamera': return tweenCamera(cmd);
         case 'SnapCamera': return snapCamera(cmd);
         case 'CreateHealthBar': return createHealthBar(cmd);
         case 'UpdateHealthBar': return updateHealthBar(cmd);
+        case 'UpdateLevelDisplay': return updateLevelDisplay(cmd);
         case 'SetTerrain': return setTerrain(cmd);
         case 'SwitchTerrainLayer': return switchTerrainLayer(cmd);
         case 'SetQueuedPath': return setQueuedPath(cmd);
@@ -220,6 +222,7 @@ function destroySprite(cmd) {
     if (healthBar) {
         healthBar.bg.destroy();
         healthBar.fg.destroy();
+        if (healthBar.levelText) healthBar.levelText.destroy();
         healthBars.delete(cmd.entityId);
     }
 
@@ -244,6 +247,9 @@ function setPosition(cmd) {
     if (healthBar) {
         mainScene.tweens.killTweensOf(healthBar.bg);
         mainScene.tweens.killTweensOf(healthBar.fg);
+        if (healthBar.levelText) {
+            mainScene.tweens.killTweensOf(healthBar.levelText);
+        }
     }
     updateHealthBarPosition(cmd.entityId, cmd.x, cmd.y);
 }
@@ -262,13 +268,26 @@ function tweenTo(cmd) {
 
     const healthBar = healthBars.get(cmd.entityId);
     if (healthBar) {
+        const barX = cmd.x * TILE_SIZE + 1;
+        const barY = cmd.y * TILE_SIZE - 4;
+
         mainScene.tweens.add({
             targets: [healthBar.bg, healthBar.fg],
-            x: cmd.x * TILE_SIZE + 1,
-            y: cmd.y * TILE_SIZE - 4,
+            x: barX,
+            y: barY,
             duration: cmd.durationMs || 300,
             ease: cmd.easing || 'Sine.easeInOut'
         });
+
+        if (healthBar.levelText) {
+            mainScene.tweens.add({
+                targets: healthBar.levelText,
+                x: barX - 3,
+                y: barY + 1,
+                duration: cmd.durationMs || 300,
+                ease: cmd.easing || 'Sine.easeInOut'
+            });
+        }
     }
 }
 
@@ -319,35 +338,35 @@ function bumpAttack(cmd) {
     });
 }
 
-/** @param {FloatingDamageCmd} cmd */
-function floatingDamage(cmd) {
-    const { x, y, damage, durationMs } = cmd;
+/** @param {FloatingTextCmd} cmd */
+function floatingText(cmd) {
+    const { x, y, text, color, offsetY, durationMs } = cmd;
     const duration = durationMs || 1000;
 
-    // Create text at tile center, anchored at top
-    const text = mainScene.add.text(
+    // Create text at tile center
+    const textObj = mainScene.add.text(
         x * TILE_SIZE + TILE_SIZE / 2,
         y * TILE_SIZE,
-        `-${damage}`,
+        text,
         {
             fontSize: '12px',
             fontFamily: 'monospace',
-            color: '#ff0000',
+            color: color,
             stroke: '#000000',
             strokeThickness: 2
         }
     );
-    text.setOrigin(0.5, 0);
-    text.setDepth(200);
+    textObj.setOrigin(0.5, 1);
+    textObj.setDepth(200);
 
-    // Float downward and fade out (upward reserved for heals)
+    // Float in direction based on offsetY (positive = down, negative = up)
     mainScene.tweens.add({
-        targets: text,
-        y: text.y + 20,
+        targets: textObj,
+        y: textObj.y + offsetY,
         alpha: 0,
         duration: duration,
         ease: 'Power1.easeOut',
-        onComplete: () => text.destroy()
+        onComplete: () => textObj.destroy()
     });
 }
 
@@ -373,7 +392,7 @@ function snapCamera(cmd) {
 }
 
 function createHealthBar(cmd) {
-    const { entityId, maxHealth, currentHealth } = cmd;
+    const { entityId, maxHealth, currentHealth, level } = cmd;
     const sprite = entities.get(entityId);
     if (!sprite) return;
 
@@ -391,7 +410,33 @@ function createHealthBar(cmd) {
     fg.setOrigin(0, 0);
     fg.setDepth(101);
 
-    healthBars.set(entityId, { bg, fg, maxHealth, width });
+    // Add level text to the left of the health bar (only for players)
+    let levelText = null;
+    if (level && level > 0) {
+        levelText = mainScene.add.text(
+            x - 3, y + 1,
+            `${level}`,
+            {
+                fontSize: '8px',
+                fontFamily: 'monospace',
+                color: '#ffffff',
+                stroke: '#000000',
+                strokeThickness: 1
+            }
+        );
+        levelText.setOrigin(1, 0.5);
+        levelText.setDepth(102);
+    }
+
+    healthBars.set(entityId, { bg, fg, maxHealth, width, levelText });
+}
+
+function updateLevelDisplay(cmd) {
+    const { entityId, level } = cmd;
+    const healthBar = healthBars.get(entityId);
+    if (!healthBar || !healthBar.levelText) return;
+
+    healthBar.levelText.setText(`${level}`);
 }
 
 function updateHealthBar(cmd) {
@@ -527,10 +572,18 @@ function updateHealthBarPosition(entityId, tileX, tileY) {
     const healthBar = healthBars.get(entityId);
     if (!healthBar) return;
 
-    healthBar.bg.x = tileX * TILE_SIZE + 1;
-    healthBar.bg.y = tileY * TILE_SIZE - 4;
-    healthBar.fg.x = tileX * TILE_SIZE + 1;
-    healthBar.fg.y = tileY * TILE_SIZE - 4;
+    const x = tileX * TILE_SIZE + 1;
+    const y = tileY * TILE_SIZE - 4;
+
+    healthBar.bg.x = x;
+    healthBar.bg.y = y;
+    healthBar.fg.x = x;
+    healthBar.fg.y = y;
+
+    if (healthBar.levelText) {
+        healthBar.levelText.x = x - 3;
+        healthBar.levelText.y = y + 1;
+    }
 }
 
 window.getInteractionInfo = (snapshot, playerId) => {

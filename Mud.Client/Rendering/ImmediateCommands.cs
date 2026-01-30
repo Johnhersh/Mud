@@ -13,5 +13,9 @@ public class ImmediateCommands
     public ImmediateCommands(IJSRuntime js) => _js = js;
 
     public async ValueTask SetTargetReticle(string? entityId)
-        => await _js.InvokeVoidAsync("executeCommands", new[] { new SetTargetReticleCommand(entityId) });
+    {
+        // Use List<object> for proper polymorphic JSON serialization (same as RenderCommandBuffer)
+        var commands = new List<object> { new SetTargetReticleCommand(entityId) };
+        await _js.InvokeVoidAsync("executeCommands", commands);
+    }
 }

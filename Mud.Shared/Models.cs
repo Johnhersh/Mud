@@ -23,6 +23,25 @@ public record AttackEvent(
     [property: Key(4)] Point TargetPosition
 );
 
+/// <summary>
+/// Sent per-player (separate from snapshot) - no PlayerId needed since recipient knows it's theirs.
+/// </summary>
+[MessagePackObject]
+public record XpGainEvent(
+    [property: Key(0)] int Amount,
+    [property: Key(1)] Point Position  // Where to show floating text (e.g., monster death location)
+);
+
+/// <summary>
+/// Sent in grouped snapshot - everyone sees level-ups (social feature).
+/// </summary>
+[MessagePackObject]
+public record LevelUpEvent(
+    [property: Key(0)] string PlayerId,  // Needed so clients know which entity leveled
+    [property: Key(1)] int NewLevel,
+    [property: Key(2)] Point Position
+);
+
 [MessagePackObject]
 public record Entity
 {
@@ -40,6 +59,22 @@ public record Entity
     public int Health { get; init; }
     [Key(6)]
     public int MaxHealth { get; init; }
+
+    // Progression
+    [Key(7)]
+    public int Level { get; init; } = 1;
+    [Key(8)]
+    public int Experience { get; init; } = 0;
+
+    // Attributes
+    [Key(9)]
+    public int Strength { get; init; } = 5;
+    [Key(10)]
+    public int Dexterity { get; init; } = 5;
+    [Key(11)]
+    public int Stamina { get; init; } = 5;
+    [Key(12)]
+    public int UnspentPoints { get; init; } = 0;
 }
 
 public enum Direction
@@ -94,4 +129,7 @@ public record WorldSnapshot
 
     [Key(10)]
     public List<AttackEvent> AttackEvents { get; init; } = new();
+
+    [Key(11)]
+    public List<LevelUpEvent> LevelUpEvents { get; init; } = new();
 }
