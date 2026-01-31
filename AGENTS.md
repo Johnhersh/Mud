@@ -29,11 +29,18 @@ The solution is divided into three main projects:
 - **Snapshots**: The server broadcasts a `WorldSnapshot` to all clients every tick.
 - **Combat System**:
   - **Entities**: `Player` generalized to `Entity` with `Health`, `MaxHealth`, and `EntityType` (Player, Monster).
-  - **Melee**: "Bump" combat triggers when moving into a monster's tile.
-  - **Ranged**: `Tab` to cycle targets, `f` to perform a ranged attack.
+  - **Melee**: "Bump" combat triggers when moving into a monster's tile. Damage = 5 + Strength.
+  - **Ranged**: `Tab` to cycle targets, `f` to perform a ranged attack. Damage = 5 + Dexterity.
   - **Visuals**: Health bars and target reticles rendered via Phaser commands.
   - **Attack Events**: Server tracks `AttackEvent` records (attacker, target, damage, isMelee, position) per tick, broadcast in `WorldSnapshot.AttackEvents`.
   - **Attack Animations**: Melee attacks trigger bump animation (80% toward target with elastic return). All attacks spawn floating damage numbers that drift downward (upward reserved for heals).
+- **Progression System**:
+  - **XP**: Killing monsters grants 25 XP to all players in the instance.
+  - **Leveling**: XP curve is `100 × level²`. Level cap is 60.
+  - **Stat Points**: Each level grants 5 points to allocate among Strength, Dexterity, and Stamina.
+  - **Attributes**: Strength (melee damage), Dexterity (ranged damage), Stamina (max HP = 50 + STA × 10).
+  - **Character Sheet**: Press `C` to open/close. Shows level, XP bar, attributes with + buttons, derived stats.
+  - **Visuals**: "+25 XP" floating text on kills, "Level Up!" on level gain, level number next to health bars.
 
 ## 🎨 Frontend & Rendering
 
