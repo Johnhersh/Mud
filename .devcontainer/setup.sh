@@ -5,6 +5,10 @@
 
 echo "=== Configuring user environment ==="
 
+# Start SSH server for remote access
+echo ">>> Starting SSH server..."
+sudo service ssh start
+
 # Playwright MCP expects Chrome at /opt/google/chrome/chrome
 # The devcontainer feature installs it elsewhere, so create a symlink
 echo ">>> Setting up Playwright Chrome symlink..."
