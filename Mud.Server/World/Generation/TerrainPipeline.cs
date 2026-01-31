@@ -49,7 +49,7 @@ public static class TerrainPipeline
     /// <summary>
     /// Convert to a complete WorldState (for overworld)
     /// </summary>
-    public static WorldState ToWorldState(this TileMapWithPOIs map, string id, WorldType type)
+    public static WorldState ToWorldState(this TileMapWithPOIs map, WorldId id, WorldType type)
     {
         return new WorldState
         {
@@ -77,7 +77,7 @@ public static class TerrainPipeline
 
         return new WorldState
         {
-            Id = $"instance_{parentPoiId}",
+            Id = new WorldId($"instance_{parentPoiId}"),
             Type = WorldType.Instance,
             Terrain = tileMap,
             POIs = new List<POI>(),

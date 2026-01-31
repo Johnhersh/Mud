@@ -101,6 +101,15 @@ public readonly record struct PlayerId([property: Key(0)] string Value)
     public override string ToString() => Value;
 }
 
+/// <summary>
+/// Strongly-typed world identifier.
+/// </summary>
+[MessagePackObject]
+public readonly record struct WorldId([property: Key(0)] string Value)
+{
+    public override string ToString() => Value;
+}
+
 [MessagePackObject]
 public record WorldSnapshot
 {

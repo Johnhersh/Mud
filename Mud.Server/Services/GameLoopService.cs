@@ -14,7 +14,7 @@ public class GameLoopService : BackgroundService
     private readonly ILogger<GameLoopService> _logger;
 
     // World management
-    private readonly ConcurrentDictionary<string, WorldState> _worlds = new();
+    private readonly ConcurrentDictionary<WorldId, WorldState> _worlds = new();
     private WorldState _overworld = null!;
 
     // Player tracking
@@ -22,13 +22,13 @@ public class GameLoopService : BackgroundService
     private readonly ConcurrentDictionary<PlayerId, ConcurrentQueue<Direction>> _playerInputQueues = new();
 
     // Attack events per world (cleared after each broadcast)
-    private readonly ConcurrentDictionary<string, ConcurrentBag<AttackEvent>> _worldAttackEvents = new();
+    private readonly ConcurrentDictionary<WorldId, ConcurrentBag<AttackEvent>> _worldAttackEvents = new();
 
     // XP events: keyed by world, then by player (for per-player sends)
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, List<XpGainEvent>>> _worldPlayerXpEvents = new();
+    private readonly ConcurrentDictionary<WorldId, ConcurrentDictionary<PlayerId, List<XpGainEvent>>> _worldPlayerXpEvents = new();
 
     // Level-up events: keyed by world only (broadcast to all in world)
-    private readonly ConcurrentDictionary<string, ConcurrentBag<LevelUpEvent>> _worldLevelUpEvents = new();
+    private readonly ConcurrentDictionary<WorldId, ConcurrentBag<LevelUpEvent>> _worldLevelUpEvents = new();
 
     private long _tick = 0;
 
@@ -135,7 +135,7 @@ public class GameLoopService : BackgroundService
         return _players.TryGetValue(playerId, out var player) ? player : null;
     }
 
-    public WorldState? GetWorld(string worldId)
+    public WorldState? GetWorld(WorldId worldId)
     {
         return _worlds.TryGetValue(worldId, out var world) ? world : null;
     }
@@ -175,7 +175,7 @@ public class GameLoopService : BackgroundService
 
     private void EnterInstance(PlayerState playerState, POI poi, WorldState overworld, Entity entity)
     {
-        string instanceId = $"instance_{poi.Id}";
+        var instanceId = new WorldId($"instance_{poi.Id}");
 
         // Get or create instance
         if (!_worlds.TryGetValue(instanceId, out var instance))
@@ -435,7 +435,7 @@ public class GameLoopService : BackgroundService
             }
 
             // Record XP gain event for this player
-            RecordXpGainEvent(world.Id, player.Id, ProgressionFormulas.XpPerKill, killedPosition);
+            RecordXpGainEvent(world.Id, new PlayerId(player.Id), ProgressionFormulas.XpPerKill, killedPosition);
 
             world.UpdateEntity(player with
             {
@@ -448,9 +448,9 @@ public class GameLoopService : BackgroundService
         }
     }
 
-    private void RecordXpGainEvent(string worldId, string playerId, int amount, Point position)
+    private void RecordXpGainEvent(WorldId worldId, PlayerId playerId, int amount, Point position)
     {
-        var playerXpEvents = _worldPlayerXpEvents.GetOrAdd(worldId, _ => new ConcurrentDictionary<string, List<XpGainEvent>>());
+        var playerXpEvents = _worldPlayerXpEvents.GetOrAdd(worldId, _ => new ConcurrentDictionary<PlayerId, List<XpGainEvent>>());
         var xpList = playerXpEvents.GetOrAdd(playerId, _ => []);
         lock (xpList)
         {
@@ -458,7 +458,7 @@ public class GameLoopService : BackgroundService
         }
     }
 
-    private void RecordLevelUpEvent(string worldId, string playerId, int newLevel, Point position)
+    private void RecordLevelUpEvent(WorldId worldId, string playerId, int newLevel, Point position)
     {
         var levelUpBag = _worldLevelUpEvents.GetOrAdd(worldId, _ => []);
         levelUpBag.Add(new LevelUpEvent(playerId, newLevel, position));
@@ -575,7 +575,7 @@ public class GameLoopService : BackgroundService
                 }
 
                 // Send XP events individually to this player
-                await SendXpEventsToPlayer(worldId, playerState.Id.Value);
+                await SendXpEventsToPlayer(worldId, playerState.Id);
             }
 
             // Clear XP events for this world after sending
@@ -583,7 +583,7 @@ public class GameLoopService : BackgroundService
         }
     }
 
-    private async Task SendXpEventsToPlayer(string worldId, string playerId)
+    private async Task SendXpEventsToPlayer(WorldId worldId, PlayerId playerId)
     {
         if (!_worldPlayerXpEvents.TryGetValue(worldId, out var playerXpEvents)) return;
         if (!playerXpEvents.TryGetValue(playerId, out var xpEvents)) return;
@@ -596,6 +596,6 @@ public class GameLoopService : BackgroundService
             xpEvents.Clear();
         }
 
-        await _hubContext.Clients.Client(playerId).OnXpGain(eventsToSend);
+        await _hubContext.Clients.Client(playerId.Value).OnXpGain(eventsToSend);
     }
 }

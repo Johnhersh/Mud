@@ -10,7 +10,7 @@ namespace Mud.Server.World;
 /// </summary>
 public class WorldState
 {
-    public string Id { get; init; } = string.Empty;
+    public WorldId Id { get; init; }
     public WorldType Type { get; init; }
     public TileMap Terrain { get; init; } = null!;
     public List<POI> POIs { get; init; } = new();
@@ -123,7 +123,7 @@ public class WorldState
         return new WorldSnapshot
         {
             Tick = tick,
-            WorldId = Id,
+            WorldId = Id.Value,
             WorldType = Type,
             Entities = Entities.Values.ToList(),
             Tiles = includeTiles ? Terrain.ToTileDataArray() : null,
