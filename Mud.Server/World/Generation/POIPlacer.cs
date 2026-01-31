@@ -74,16 +74,67 @@ public static class POIPlacer
     /// </summary>
     public static POIMap PlaceExitMarker(this BiomeMap map, string parentPoiId)
     {
+        var intendedPosition = new Point(map.Width / 2, map.Height - 2);
+        var exitPosition = FindNearestWalkablePosition(map, intendedPosition);
+
         var exitPOI = new POI
         {
             Id = $"exit_{parentPoiId}",
-            Position = new Point(map.Width / 2, map.Height - 2),
+            Position = exitPosition,
             Type = POIType.Camp,
             InfluenceRadius = WorldConfig.ExitInfluenceRadius,
             ParentPOIId = parentPoiId
         };
 
         return new POIMap(map.Biomes, map.Noise, new List<POI> { exitPOI }, map.Width, map.Height, map.Seed, map.GhostPadding);
+    }
+
+    /// <summary>
+    /// Find the nearest walkable position using spiral search.
+    /// Returns the starting position if already walkable, otherwise expands outward.
+    /// </summary>
+    private static Point FindNearestWalkablePosition(BiomeMap map, Point start)
+    {
+        if (IsWalkable(map, start))
+            return start;
+
+        // Spiral search: expand outward in rings
+        int maxRadius = Math.Max(map.Width, map.Height);
+
+        for (int distance = 1; distance <= maxRadius; distance++)
+        {
+            // Check all positions at this Manhattan distance in a square spiral
+            // Top edge: y = start.Y - distance, x goes from start.X - distance to start.X + distance
+            for (int x = start.X - distance; x <= start.X + distance; x++)
+            {
+                var pos = new Point(x, start.Y - distance);
+                if (IsWalkable(map, pos)) return pos;
+            }
+
+            // Right edge: x = start.X + distance, y goes from start.Y - distance + 1 to start.Y + distance
+            for (int y = start.Y - distance + 1; y <= start.Y + distance; y++)
+            {
+                var pos = new Point(start.X + distance, y);
+                if (IsWalkable(map, pos)) return pos;
+            }
+
+            // Bottom edge: y = start.Y + distance, x goes from start.X + distance - 1 to start.X - distance
+            for (int x = start.X + distance - 1; x >= start.X - distance; x--)
+            {
+                var pos = new Point(x, start.Y + distance);
+                if (IsWalkable(map, pos)) return pos;
+            }
+
+            // Left edge: x = start.X - distance, y goes from start.Y + distance - 1 to start.Y - distance + 1
+            for (int y = start.Y + distance - 1; y >= start.Y - distance + 1; y--)
+            {
+                var pos = new Point(start.X - distance, y);
+                if (IsWalkable(map, pos)) return pos;
+            }
+        }
+
+        // Fallback: return start position (should never happen with valid terrain generation)
+        return start;
     }
 
     /// <summary>
