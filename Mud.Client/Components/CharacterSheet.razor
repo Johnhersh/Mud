@@ -1,4 +1,5 @@
 @using Mud.Client.Services
+@using Mud.Shared
 
 <div class="character-sheet-overlay @(IsOpen ? "open" : "")" @onclick="OnOverlayClick">
     <div class="character-sheet" @onclick:stopPropagation>
@@ -18,7 +19,7 @@
                 <span class="attr-value">@Strength</span>
                 @if (UnspentPoints > 0)
                 {
-                    <button class="add-btn" @onclick="@(() => AllocateStatAsync("strength"))">+</button>
+                    <button class="add-btn" @onclick="@(() => AllocateStatAsync(StatType.Strength))">+</button>
                 }
             </div>
             <div class="attribute">
@@ -26,7 +27,7 @@
                 <span class="attr-value">@Dexterity</span>
                 @if (UnspentPoints > 0)
                 {
-                    <button class="add-btn" @onclick="@(() => AllocateStatAsync("dexterity"))">+</button>
+                    <button class="add-btn" @onclick="@(() => AllocateStatAsync(StatType.Dexterity))">+</button>
                 }
             </div>
             <div class="attribute">
@@ -34,7 +35,7 @@
                 <span class="attr-value">@Stamina</span>
                 @if (UnspentPoints > 0)
                 {
-                    <button class="add-btn" @onclick="@(() => AllocateStatAsync("stamina"))">+</button>
+                    <button class="add-btn" @onclick="@(() => AllocateStatAsync(StatType.Stamina))">+</button>
                 }
             </div>
         </div>
@@ -55,7 +56,7 @@
 @code {
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public EventCallback<string> OnAllocateStat { get; set; }
+    [Parameter] public EventCallback<StatType> OnAllocateStat { get; set; }
 
     [Parameter] public string PlayerName { get; set; } = "";
     [Parameter] public int Level { get; set; } = 1;
@@ -75,7 +76,7 @@
             ? (double)(Experience - PreviousLevelXp) / (ExperienceToNext - PreviousLevelXp) * 100
             : 0;
 
-    private async Task AllocateStatAsync(string stat)
+    private async Task AllocateStatAsync(StatType stat)
     {
         await OnAllocateStat.InvokeAsync(stat);
     }

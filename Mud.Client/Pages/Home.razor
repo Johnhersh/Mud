@@ -12,19 +12,14 @@
 
 <PageTitle>Mud</PageTitle>
 
-<CharacterSheet
-    IsOpen="_characterSheetOpen"
-    OnClose="CloseCharacterSheet"
-    OnAllocateStat="AllocateStat"
-    PlayerName="@(_playerEntity?.Name ?? "")"
-    Level="@(_playerEntity?.Level ?? 1)"
-    Experience="@(_playerEntity?.Experience ?? 0)"
-    Strength="@(_playerEntity?.Strength ?? 5)"
-    Dexterity="@(_playerEntity?.Dexterity ?? 5)"
-    Stamina="@(_playerEntity?.Stamina ?? 5)"
+<CharacterSheet IsOpen="_characterSheetOpen" OnClose="CloseCharacterSheet" OnAllocateStat="AllocateStat"
+    PlayerName="@(_playerEntity?.Name ?? "")" Level="@(_playerEntity?.Level ?? 1)"
+    Experience="@(_playerEntity?.Experience ?? 0)" Strength="@(_playerEntity?.Strength ?? 5)"
+    Dexterity="@(_playerEntity?.Dexterity ?? 5)" Stamina="@(_playerEntity?.Stamina ?? 5)"
     UnspentPoints="@(_playerEntity?.UnspentPoints ?? 0)" />
 
-<div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;" id="game-container">
+<div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;"
+    id="game-container">
     <h1>Mud V0</h1>
 
     @if (_snapshot != null)
@@ -107,7 +102,7 @@
         _playerEntity = _snapshot.Entities.FirstOrDefault(e => e.Id == _myPlayerId);
 
         // Reconcile local queue with server state
-        if (_playerEntity != null)
+        if (_playerEntity is not null)
         {
             while (_localInputQueue.Count > _playerEntity.QueuedPath.Count)
             {
@@ -116,7 +111,7 @@
         }
 
         // Validate target still exists
-        if (_targetId != null && !_snapshot.Entities.Any(e => e.Id == _targetId))
+        if (_targetId is not null && !_snapshot.Entities.Any(e => e.Id == _targetId))
         {
             _targetId = null;
             await ImmediateCommands.SetTargetReticle(null);
@@ -244,9 +239,9 @@
     private bool IsOpposite(Direction d1, Direction d2)
     {
         return (d1 == Direction.Up && d2 == Direction.Down) ||
-               (d1 == Direction.Down && d2 == Direction.Up) ||
-               (d1 == Direction.Left && d2 == Direction.Right) ||
-               (d1 == Direction.Right && d2 == Direction.Left);
+        (d1 == Direction.Down && d2 == Direction.Up) ||
+        (d1 == Direction.Left && d2 == Direction.Right) ||
+        (d1 == Direction.Right && d2 == Direction.Left);
     }
 
     private void ToggleCharacterSheet()
@@ -261,9 +256,9 @@
         StateHasChanged();
     }
 
-    private async Task AllocateStat(string statName)
+    private async Task AllocateStat(StatType stat)
     {
-        await GameClient.AllocateStatAsync(statName);
+        await GameClient.AllocateStatAsync(stat);
     }
 
     public void Dispose()

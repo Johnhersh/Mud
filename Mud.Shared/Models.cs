@@ -14,6 +14,13 @@ public enum EntityType
     Monster
 }
 
+public enum StatType
+{
+    Strength,
+    Dexterity,
+    Stamina
+}
+
 [MessagePackObject]
 public record AttackEvent(
     [property: Key(0)] string AttackerId,

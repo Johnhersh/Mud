@@ -10,7 +10,7 @@ namespace Mud.Server.Services;
 
 public class GameLoopService : BackgroundService
 {
-    private readonly IHubContext<GameHub> _hubContext;
+    private readonly IHubContext<GameHub, IGameClient> _hubContext;
     private readonly ILogger<GameLoopService> _logger;
 
     // World management
@@ -32,7 +32,7 @@ public class GameLoopService : BackgroundService
 
     private long _tick = 0;
 
-    public GameLoopService(IHubContext<GameHub> hubContext, ILogger<GameLoopService> logger)
+    public GameLoopService(IHubContext<GameHub, IGameClient> hubContext, ILogger<GameLoopService> logger)
     {
         _hubContext = hubContext;
         _logger = logger;
@@ -464,25 +464,25 @@ public class GameLoopService : BackgroundService
         levelUpBag.Add(new LevelUpEvent(playerId, newLevel, position));
     }
 
-    public void AllocateStat(PlayerId playerId, string statName)
+    public void AllocateStat(PlayerId playerId, StatType stat)
     {
         var (world, player) = FindPlayer(playerId);
         if (world == null || player == null) return;
         if (player.UnspentPoints <= 0) return;
 
-        var updated = statName.ToLowerInvariant() switch
+        var updated = stat switch
         {
-            "strength" => player with
+            StatType.Strength => player with
             {
                 Strength = player.Strength + 1,
                 UnspentPoints = player.UnspentPoints - 1
             },
-            "dexterity" => player with
+            StatType.Dexterity => player with
             {
                 Dexterity = player.Dexterity + 1,
                 UnspentPoints = player.UnspentPoints - 1
             },
-            "stamina" => AllocateStamina(player),
+            StatType.Stamina => AllocateStamina(player),
             _ => player
         };
 
@@ -490,7 +490,7 @@ public class GameLoopService : BackgroundService
         {
             world.UpdateEntity(updated);
             _logger.LogInformation("Player {PlayerId} allocated point to {Stat}. New value: {Value}",
-                playerId, statName, GetStatValue(updated, statName));
+                playerId, stat, GetStatValue(updated, stat));
         }
     }
 
@@ -509,11 +509,11 @@ public class GameLoopService : BackgroundService
         };
     }
 
-    private static int GetStatValue(Entity entity, string statName) => statName.ToLowerInvariant() switch
+    private static int GetStatValue(Entity entity, StatType stat) => stat switch
     {
-        "strength" => entity.Strength,
-        "dexterity" => entity.Dexterity,
-        "stamina" => entity.Stamina,
+        StatType.Strength => entity.Strength,
+        StatType.Dexterity => entity.Dexterity,
+        StatType.Stamina => entity.Stamina,
         _ => 0
     };
 
@@ -567,11 +567,11 @@ public class GameLoopService : BackgroundService
                     _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
                         playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
                     playerState.SentTilesWorldIds.Add(worldId);
-                    await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithTiles);
+                    await _hubContext.Clients.Client(playerState.Id.Value).OnWorldUpdate(snapshotWithTiles);
                 }
                 else
                 {
-                    await _hubContext.Clients.Client(playerState.Id.Value).SendAsync("OnWorldUpdate", snapshotWithoutTiles);
+                    await _hubContext.Clients.Client(playerState.Id.Value).OnWorldUpdate(snapshotWithoutTiles);
                 }
 
                 // Send XP events individually to this player
@@ -596,6 +596,6 @@ public class GameLoopService : BackgroundService
             xpEvents.Clear();
         }
 
-        await _hubContext.Clients.Client(playerId).SendAsync("OnXpGain", eventsToSend);
+        await _hubContext.Clients.Client(playerId).OnXpGain(eventsToSend);
     }
 }
