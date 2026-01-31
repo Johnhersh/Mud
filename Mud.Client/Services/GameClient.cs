@@ -1,13 +1,18 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Mud.Shared;
+using TypedSignalR.Client;
 
 namespace Mud.Client.Services;
 
-public class GameClient : IAsyncDisposable
+public class GameClient : IAsyncDisposable, IGameClient
 {
     private readonly HubConnection _hubConnection;
+    private readonly IGameHub _hub;
+    private readonly IDisposable _subscription;
+
     public event Action<WorldSnapshot>? OnWorldUpdate;
+    public event Action<List<XpGainEvent>>? OnXpGain;
 
     public GameClient(string baseUri)
     {
@@ -17,41 +22,43 @@ public class GameClient : IAsyncDisposable
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On<WorldSnapshot>("OnWorldUpdate", snapshot =>
-        {
-            OnWorldUpdate?.Invoke(snapshot);
-        });
+        _hub = _hubConnection.CreateHubProxy<IGameHub>();
+        _subscription = _hubConnection.Register<IGameClient>(this);
     }
 
     public string? ConnectionId => _hubConnection.ConnectionId;
+
+    // IGameClient implementation - called by server
+    Task IGameClient.OnWorldUpdate(WorldSnapshot snapshot)
+    {
+        OnWorldUpdate?.Invoke(snapshot);
+        return Task.CompletedTask;
+    }
+
+    Task IGameClient.OnXpGain(List<XpGainEvent> xpEvents)
+    {
+        OnXpGain?.Invoke(xpEvents);
+        return Task.CompletedTask;
+    }
 
     public async Task StartAsync()
     {
         await _hubConnection.StartAsync();
     }
 
-    public async Task JoinAsync(string name)
-    {
-        await _hubConnection.SendAsync("Join", name);
-    }
+    public Task JoinAsync(string name) => _hub.Join(name);
 
-    public async Task MoveAsync(Direction direction)
-    {
-        await _hubConnection.SendAsync("Move", direction);
-    }
+    public Task MoveAsync(Direction direction) => _hub.Move(direction);
 
-    public async Task RangedAttackAsync(string targetId)
-    {
-        await _hubConnection.SendAsync("RangedAttack", targetId);
-    }
+    public Task RangedAttackAsync(string targetId) => _hub.RangedAttack(targetId);
 
-    public async Task InteractAsync()
-    {
-        await _hubConnection.SendAsync("Interact");
-    }
+    public Task InteractAsync() => _hub.Interact();
+
+    public Task AllocateStatAsync(StatType stat) => _hub.AllocateStat(stat);
 
     public async ValueTask DisposeAsync()
     {
+        _subscription.Dispose();
         await _hubConnection.DisposeAsync();
     }
 }

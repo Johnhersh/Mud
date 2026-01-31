@@ -9,19 +9,19 @@ public class PlayerState
 {
     public PlayerId Id { get; init; }
     public string Name { get; set; } = string.Empty;
-    public string CurrentWorldId { get; set; } = string.Empty;
+    public WorldId CurrentWorldId { get; set; }
     public Point Position { get; set; } = new(0, 0);
     public Point LastOverworldPosition { get; set; } = new(0, 0);
 
     /// <summary>
     /// Track which worlds have had tiles sent to avoid resending static data
     /// </summary>
-    public HashSet<string> SentTilesWorldIds { get; } = new();
+    public HashSet<WorldId> SentTilesWorldIds { get; } = new();
 
     /// <summary>
     /// Move player to a new world
     /// </summary>
-    public void TransferToWorld(string worldId, Point position)
+    public void TransferToWorld(WorldId worldId, Point position)
     {
         CurrentWorldId = worldId;
         Position = position;

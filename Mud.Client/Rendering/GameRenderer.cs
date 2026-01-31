@@ -45,9 +45,23 @@ public class GameRenderer
         bool worldChanged = ProcessWorldChange(snapshot);
         ProcessEntities(snapshot.Entities, worldChanged);
         ProcessAttackEvents(snapshot.AttackEvents);
+        ProcessLevelUpEvents(snapshot.LevelUpEvents);
         ProcessCamera(snapshot.Entities, playerId, worldChanged);
         ProcessPOIs(snapshot.POIs);
         ProcessExitMarker(snapshot.ExitMarker);
+
+        await _buffer.FlushToGameJS();
+    }
+
+    /// <summary>
+    /// Process XP gain events (called separately from Home.razor's OnXpGain handler).
+    /// </summary>
+    public async ValueTask ProcessXpEvents(List<XpGainEvent> xpEvents)
+    {
+        foreach (var xpEvent in xpEvents)
+        {
+            _buffer.FloatingXp(xpEvent.Position.X, xpEvent.Position.Y, xpEvent.Amount);
+        }
 
         await _buffer.FlushToGameJS();
     }
@@ -116,7 +130,7 @@ public class GameRenderer
         var tint = entity.Type == EntityType.Player ? 0xFFFF00u : 0xFF0000u;
 
         _buffer.CreateSprite(entity.Id, tileIndex, entity.Position.X, entity.Position.Y, tint, depth: 50);
-        _buffer.CreateHealthBar(entity.Id, entity.MaxHealth, entity.Health);
+        _buffer.CreateHealthBar(entity.Id, entity.MaxHealth, entity.Health, entity.Level);
 
         _entities[entity.Id] = new EntityRenderState(entity);
     }
@@ -130,6 +144,7 @@ public class GameRenderer
         }
 
         if (entity.Health != state.Health) _buffer.UpdateHealthBar(entity.Id, entity.Health);
+        if (entity.Level != state.Level) _buffer.UpdateLevelDisplay(entity.Id, entity.Level);
 
         state.Update(entity);
     }
@@ -141,6 +156,16 @@ public class GameRenderer
             if (attack.IsMelee) _buffer.BumpAttack(attack.AttackerId, attack.TargetId);
 
             _buffer.FloatingDamage(attack.TargetPosition.X, attack.TargetPosition.Y, attack.Damage);
+        }
+    }
+
+    private void ProcessLevelUpEvents(List<LevelUpEvent>? levelUpEvents)
+    {
+        if (levelUpEvents is null || levelUpEvents.Count == 0) return;
+
+        foreach (var levelEvent in levelUpEvents)
+        {
+            _buffer.FloatingLevelUp(levelEvent.Position.X, levelEvent.Position.Y);
         }
     }
 

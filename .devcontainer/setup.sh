@@ -1,28 +1,40 @@
 #!/bin/bash
 
-# Install zellij
-curl -L https://github.com/zellij-org/zellij/releases/latest/download/zellij-x86_64-unknown-linux-musl.tar.gz | tar xz -C ~/.local/bin
+# This script only contains user-specific config that can't be baked into the Docker image.
+# All downloads/installs have been moved to the Dockerfile for caching.
 
-# Create zellij config for mobile session (runs claude as default shell)
+echo "=== Configuring user environment ==="
+
+# Start SSH server for remote access
+echo ">>> Starting SSH server..."
+sudo service ssh start
+
+# Playwright MCP expects Chrome at /opt/google/chrome/chrome
+# The devcontainer feature installs it elsewhere, so create a symlink
+echo ">>> Setting up Playwright Chrome symlink..."
+CHROME_PATH=$(find ~/.cache/ms-playwright -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1)
+if [ -n "$CHROME_PATH" ]; then
+    sudo mkdir -p /opt/google/chrome
+    sudo ln -sf "$CHROME_PATH" /opt/google/chrome/chrome
+    echo "    Linked $CHROME_PATH -> /opt/google/chrome/chrome"
+else
+    echo "    Warning: Playwright Chrome not found, skipping symlink"
+fi
+
+# npm is only available after the node devcontainer feature runs, so this can't be in Dockerfile
+echo ">>> Installing opencode-ai..."
+npm install -g opencode-ai@latest
+
+echo ">>> Creating zellij config..."
 mkdir -p ~/.config/zellij
 cat > ~/.config/zellij/mobile-config.kdl << 'EOF'
 default_shell "/home/vscode/.local/bin/claude"
 EOF
 
-# Set UTF-8 locale
+echo ">>> Configuring bashrc..."
 cat >> ~/.bashrc << 'EOF'
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
-EOF
-
-# Install global npm packages
-npm install -g opencode-ai@latest
-
-# Install Claude Code
-curl -fsSL https://claude.ai/install.sh | bash
-
-# Add mobile zellij helper to bashrc
-cat >> ~/.bashrc << 'EOF'
 
 # Start zellij mobile session with claude
 mobile() {
@@ -34,3 +46,5 @@ mobile() {
     fi
 }
 EOF
+
+echo "=== User environment configured ==="

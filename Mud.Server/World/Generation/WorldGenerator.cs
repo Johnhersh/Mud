@@ -20,7 +20,7 @@ public static class WorldGenerator
             .ToTileMap()
             .PlaceBridges()
             .ApplyGrassDensity()
-            .ToWorldState("overworld", WorldType.Overworld);
+            .ToWorldState(new WorldId("overworld"), WorldType.Overworld);
 
     /// <summary>
     /// Generate an instance from a POI with overworld context

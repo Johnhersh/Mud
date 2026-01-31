@@ -12,7 +12,14 @@
 
 <PageTitle>Mud</PageTitle>
 
-<div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;" id="game-container">
+<CharacterSheet IsOpen="_characterSheetOpen" OnClose="CloseCharacterSheet" OnAllocateStat="AllocateStat"
+    PlayerName="@(_playerEntity?.Name ?? "")" Level="@(_playerEntity?.Level ?? 1)"
+    Experience="@(_playerEntity?.Experience ?? 0)" Strength="@(_playerEntity?.Strength ?? 5)"
+    Dexterity="@(_playerEntity?.Dexterity ?? 5)" Stamina="@(_playerEntity?.Stamina ?? 5)"
+    UnspentPoints="@(_playerEntity?.UnspentPoints ?? 0)" />
+
+<div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;"
+    id="game-container">
     <h1>Mud V0</h1>
 
     @if (_snapshot != null)
@@ -61,6 +68,8 @@
     private string? _myPlayerId;
     private string? _targetId;
     private string? _interactionPrompt;
+    private bool _characterSheetOpen;
+    private Entity? _playerEntity;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -74,6 +83,7 @@
             StateHasChanged();
 
             GameClient.OnWorldUpdate += HandleWorldUpdate;
+            GameClient.OnXpGain += HandleXpGain;
             await GameClient.StartAsync();
             _myPlayerId = GameClient.ConnectionId;
 
@@ -88,18 +98,20 @@
         _myPlayerId = GameClient.ConnectionId;
         _status = GameStatus.Playing;
 
+        // Track player entity for character sheet
+        _playerEntity = _snapshot.Entities.FirstOrDefault(e => e.Id == _myPlayerId);
+
         // Reconcile local queue with server state
-        var me = _snapshot.Entities.FirstOrDefault(p => p.Id == _myPlayerId);
-        if (me != null)
+        if (_playerEntity is not null)
         {
-            while (_localInputQueue.Count > me.QueuedPath.Count)
+            while (_localInputQueue.Count > _playerEntity.QueuedPath.Count)
             {
                 _localInputQueue.RemoveAt(0);
             }
         }
 
         // Validate target still exists
-        if (_targetId != null && !_snapshot.Entities.Any(e => e.Id == _targetId))
+        if (_targetId is not null && !_snapshot.Entities.Any(e => e.Id == _targetId))
         {
             _targetId = null;
             await ImmediateCommands.SetTargetReticle(null);
@@ -115,9 +127,31 @@
         StateHasChanged();
     }
 
+    private async void HandleXpGain(List<XpGainEvent> xpEvents)
+    {
+        await Renderer.ProcessXpEvents(xpEvents);
+    }
+
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (_status != GameStatus.Playing) return;
+
+        // Character sheet toggle
+        if (e.Key == "c" || e.Key == "C")
+        {
+            ToggleCharacterSheet();
+            return;
+        }
+
+        // Escape closes character sheet
+        if (e.Key == "Escape" && _characterSheetOpen)
+        {
+            CloseCharacterSheet();
+            return;
+        }
+
+        // Block game input while character sheet is open
+        if (_characterSheetOpen) return;
 
         if (e.Key == "Tab")
         {
@@ -205,14 +239,32 @@
     private bool IsOpposite(Direction d1, Direction d2)
     {
         return (d1 == Direction.Up && d2 == Direction.Down) ||
-               (d1 == Direction.Down && d2 == Direction.Up) ||
-               (d1 == Direction.Left && d2 == Direction.Right) ||
-               (d1 == Direction.Right && d2 == Direction.Left);
+        (d1 == Direction.Down && d2 == Direction.Up) ||
+        (d1 == Direction.Left && d2 == Direction.Right) ||
+        (d1 == Direction.Right && d2 == Direction.Left);
+    }
+
+    private void ToggleCharacterSheet()
+    {
+        _characterSheetOpen = !_characterSheetOpen;
+        StateHasChanged();
+    }
+
+    private void CloseCharacterSheet()
+    {
+        _characterSheetOpen = false;
+        StateHasChanged();
+    }
+
+    private async Task AllocateStat(StatType stat)
+    {
+        await GameClient.AllocateStatAsync(stat);
     }
 
     public void Dispose()
     {
         GameClient.OnWorldUpdate -= HandleWorldUpdate;
+        GameClient.OnXpGain -= HandleXpGain;
     }
 
     private class InteractionInfo

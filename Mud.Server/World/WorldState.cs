@@ -10,7 +10,7 @@ namespace Mud.Server.World;
 /// </summary>
 public class WorldState
 {
-    public string Id { get; init; } = string.Empty;
+    public WorldId Id { get; init; }
     public WorldType Type { get; init; }
     public TileMap Terrain { get; init; } = null!;
     public List<POI> POIs { get; init; } = new();
@@ -117,12 +117,13 @@ public class WorldState
     /// <param name="tick">Current game tick</param>
     /// <param name="includeTiles">Whether to include tile data (only needed on world change)</param>
     /// <param name="attackEvents">Attack events that occurred this tick</param>
-    public WorldSnapshot ToSnapshot(long tick, bool includeTiles, List<AttackEvent> attackEvents)
+    /// <param name="levelUpEvents">Level up events that occurred this tick</param>
+    public WorldSnapshot ToSnapshot(long tick, bool includeTiles, List<AttackEvent> attackEvents, List<LevelUpEvent>? levelUpEvents = null)
     {
         return new WorldSnapshot
         {
             Tick = tick,
-            WorldId = Id,
+            WorldId = Id.Value,
             WorldType = Type,
             Entities = Entities.Values.ToList(),
             Tiles = includeTiles ? Terrain.ToTileDataArray() : null,
@@ -131,7 +132,8 @@ public class WorldState
             Width = Terrain.Width,
             Height = Terrain.Height,
             GhostPadding = Terrain.GhostPadding,
-            AttackEvents = attackEvents
+            AttackEvents = attackEvents,
+            LevelUpEvents = levelUpEvents ?? []
         };
     }
 }
