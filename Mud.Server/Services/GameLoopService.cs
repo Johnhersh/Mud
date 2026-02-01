@@ -93,7 +93,7 @@ public class GameLoopService : BackgroundService
                 MaxHealth = entity.MaxHealth,
                 PositionX = overworldX,
                 PositionY = overworldY,
-                CurrentWorldId = null, // Always resume in overworld
+                CurrentWorldId = WorldId.Overworld.Value,
                 LastOverworldX = overworldX,
                 LastOverworldY = overworldY
             };
@@ -124,9 +124,16 @@ public class GameLoopService : BackgroundService
                 Id = $"monster_{world.Id}_{i}",
                 Name = "Goblin",
                 Position = pos,
+                QueuedPath = new List<Point>(),
                 Type = EntityType.Monster,
                 Health = 50,
-                MaxHealth = 50
+                MaxHealth = 50,
+                Level = 1,
+                Experience = 0,
+                Strength = 5,
+                Dexterity = 5,
+                Stamina = 5,
+                UnspentPoints = 0
             };
             world.AddEntity(monster);
         }
@@ -297,7 +304,7 @@ public class GameLoopService : BackgroundService
                         entity.Health,
                         overworldX,
                         overworldY,
-                        null, // Always resume in overworld
+                        WorldId.Overworld.Value,
                         overworldX,
                         overworldY
                     );

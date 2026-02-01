@@ -21,7 +21,7 @@ public record CharacterData
     public int MaxHealth { get; init; } = 100;
     public int PositionX { get; init; } = 0;
     public int PositionY { get; init; } = 0;
-    public string? CurrentWorldId { get; init; }
+    public string CurrentWorldId { get; init; } = WorldId.Overworld.Value;
     public int LastOverworldX { get; init; } = 0;
     public int LastOverworldY { get; init; } = 0;
 }
@@ -53,7 +53,7 @@ public interface IPersistenceService
     /// Called on player disconnect.
     /// </summary>
     Task SaveVolatileStateAsync(CharacterId characterId, int health, int positionX, int positionY,
-        string? currentWorldId, int lastOverworldX, int lastOverworldY);
+        string currentWorldId, int lastOverworldX, int lastOverworldY);
 
     /// <summary>
     /// Save all state for a character (used during graceful shutdown).

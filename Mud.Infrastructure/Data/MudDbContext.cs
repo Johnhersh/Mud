@@ -21,6 +21,9 @@ public class MudDbContext : IdentityDbContext<ApplicationUser>
 
         builder.Entity<CharacterEntity>(entity =>
         {
+            entity.Property(c => c.Id)
+                .HasDefaultValueSql("gen_random_uuid()");
+
             entity.HasIndex(c => c.AccountId);
             entity.HasIndex(c => c.Name).IsUnique();
 

@@ -1,23 +1,21 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using Mud.Core;
 
 namespace Mud.Infrastructure.Data;
 
 /// <summary>
 /// Character database entity.
 /// </summary>
-[Table("Characters")]
 public class CharacterEntity
 {
-    [Key]
     public Guid Id { get; set; }
 
     [Required]
-    public string AccountId { get; set; } = string.Empty;
+    public required string AccountId { get; set; }
 
     [Required]
     [MaxLength(50)]
-    public string Name { get; set; } = string.Empty;
+    public required string Name { get; set; }
 
     // Progression (persisted immediately)
     public int Level { get; set; } = 1;
@@ -32,7 +30,7 @@ public class CharacterEntity
     public int MaxHealth { get; set; } = 100;
     public int PositionX { get; set; } = 0;
     public int PositionY { get; set; } = 0;
-    public string? CurrentWorldId { get; set; }
+    public string CurrentWorldId { get; set; } = WorldId.Overworld.Value;
     public int LastOverworldX { get; set; } = 0;
     public int LastOverworldY { get; set; } = 0;
 
@@ -40,6 +38,5 @@ public class CharacterEntity
     public DateTime UpdatedAt { get; set; }
 
     // Navigation
-    [ForeignKey(nameof(AccountId))]
     public ApplicationUser? Account { get; set; }
 }

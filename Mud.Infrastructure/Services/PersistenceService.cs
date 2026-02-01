@@ -25,8 +25,7 @@ public class PersistenceService : IPersistenceService
         var entity = await _context.Characters
             .FirstOrDefaultAsync(c => c.AccountId == accountId.Value);
 
-        if (entity == null)
-            return null;
+        if (entity is null) return null;
 
         return ToCharacterData(entity);
     }
@@ -35,7 +34,6 @@ public class PersistenceService : IPersistenceService
     {
         var entity = new CharacterEntity
         {
-            Id = Guid.NewGuid(),
             AccountId = accountId.Value,
             Name = name,
             Level = 1,
@@ -86,7 +84,7 @@ public class PersistenceService : IPersistenceService
     }
 
     public async Task SaveVolatileStateAsync(CharacterId characterId, int health, int positionX, int positionY,
-        string? currentWorldId, int lastOverworldX, int lastOverworldY)
+        string currentWorldId, int lastOverworldX, int lastOverworldY)
     {
         var entity = await _context.Characters.FindAsync(characterId.Value);
         if (entity == null)
