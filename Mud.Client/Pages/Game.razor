@@ -1,7 +1,9 @@
-@rendermode InteractiveWebAssembly
-@page "/"
-@using Mud.Shared
-@using Mud.Shared.World
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@page "/Game"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Mud.Core
+@using Mud.Core.World
 @using Mud.Client.Services
 @using Mud.Client.Rendering
 @inject GameClient GameClient

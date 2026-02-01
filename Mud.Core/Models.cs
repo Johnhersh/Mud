@@ -1,7 +1,7 @@
 using MessagePack;
-using Mud.Shared.World;
+using Mud.Core.World;
 
-namespace Mud.Shared;
+namespace Mud.Core;
 
 [MessagePackObject]
 public record Point(
@@ -106,6 +106,23 @@ public readonly record struct PlayerId([property: Key(0)] string Value)
 /// </summary>
 [MessagePackObject]
 public readonly record struct WorldId([property: Key(0)] string Value)
+{
+    public override string ToString() => Value;
+}
+
+/// <summary>
+/// Strongly-typed character identifier (persistent, wraps database GUID).
+/// </summary>
+[MessagePackObject]
+public readonly record struct CharacterId([property: Key(0)] Guid Value)
+{
+    public override string ToString() => Value.ToString();
+}
+
+/// <summary>
+/// Strongly-typed account identifier (wraps ASP.NET Identity user ID).
+/// </summary>
+public readonly record struct AccountId(string Value)
 {
     public override string ToString() => Value;
 }

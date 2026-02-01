@@ -1,4 +1,4 @@
-using Mud.Shared;
+using Mud.Core;
 
 namespace Mud.Client.Rendering;
 

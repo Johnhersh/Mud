@@ -1,4 +1,4 @@
-using Mud.Shared;
+using Mud.Core;
 
 namespace Mud.Server.World;
 
@@ -8,6 +8,7 @@ namespace Mud.Server.World;
 public class PlayerState
 {
     public PlayerId Id { get; init; }
+    public CharacterId? CharacterId { get; init; }  // For persistence
     public string Name { get; set; } = string.Empty;
     public WorldId CurrentWorldId { get; set; }
     public Point Position { get; set; } = new(0, 0);

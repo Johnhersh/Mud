@@ -1,6 +1,7 @@
 using MessagePack;
+using Mud.Core;
 
-namespace Mud.Shared.World;
+namespace Mud.Core.World;
 
 /// <summary>
 /// Types of Points of Interest

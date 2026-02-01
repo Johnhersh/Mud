@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.SignalR;
 using Mud.Server.Hubs;
 using Mud.Server.World;
 using Mud.Server.World.Generation;
-using Mud.Shared;
-using Mud.Shared.World;
+using Mud.Core;
+using Mud.Core.World;
+using Mud.Core.Services;
 
 namespace Mud.Server.Services;
 
@@ -12,6 +13,8 @@ public class GameLoopService : BackgroundService
 {
     private readonly IHubContext<GameHub, IGameClient> _hubContext;
     private readonly ILogger<GameLoopService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHostApplicationLifetime _appLifetime;
 
     // World management
     private readonly ConcurrentDictionary<WorldId, WorldState> _worlds = new();
@@ -30,13 +33,73 @@ public class GameLoopService : BackgroundService
     // Level-up events: keyed by world only (broadcast to all in world)
     private readonly ConcurrentDictionary<WorldId, ConcurrentBag<LevelUpEvent>> _worldLevelUpEvents = new();
 
+    // Pending persistence operations (processed async to not block game loop)
+    private readonly ConcurrentQueue<Func<IPersistenceService, Task>> _pendingPersistenceOps = new();
+
     private long _tick = 0;
 
-    public GameLoopService(IHubContext<GameHub, IGameClient> hubContext, ILogger<GameLoopService> logger)
+    public GameLoopService(
+        IHubContext<GameHub, IGameClient> hubContext,
+        ILogger<GameLoopService> logger,
+        IServiceScopeFactory scopeFactory,
+        IHostApplicationLifetime appLifetime)
     {
         _hubContext = hubContext;
         _logger = logger;
+        _scopeFactory = scopeFactory;
+        _appLifetime = appLifetime;
+
         InitializeWorld();
+
+        // Register graceful shutdown
+        _appLifetime.ApplicationStopping.Register(OnShutdown);
+    }
+
+    private void OnShutdown()
+    {
+        _logger.LogInformation("Server shutting down, saving all player states...");
+        SaveAllPlayersSync();
+        _logger.LogInformation("All player states saved");
+    }
+
+    private void SaveAllPlayersSync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+
+        foreach (var playerState in _players.Values)
+        {
+            if (playerState.CharacterId == null) continue;
+
+            var (world, entity) = FindPlayerInternal(playerState.Id);
+            if (entity == null) continue;
+
+            // Determine overworld position for resume
+            var (overworldX, overworldY) = playerState.CurrentWorldId == _overworld.Id
+                ? (entity.Position.X, entity.Position.Y)
+                : (playerState.LastOverworldPosition.X, playerState.LastOverworldPosition.Y);
+
+            var data = new CharacterData
+            {
+                Id = playerState.CharacterId.Value,
+                Name = entity.Name,
+                Level = entity.Level,
+                Experience = entity.Experience,
+                Strength = entity.Strength,
+                Dexterity = entity.Dexterity,
+                Stamina = entity.Stamina,
+                UnspentPoints = entity.UnspentPoints,
+                Health = entity.Health,
+                MaxHealth = entity.MaxHealth,
+                PositionX = overworldX,
+                PositionY = overworldY,
+                CurrentWorldId = null, // Always resume in overworld
+                LastOverworldX = overworldX,
+                LastOverworldY = overworldY
+            };
+
+            persistenceService.SaveAllAsync(playerState.CharacterId.Value, data).Wait();
+        }
     }
 
     private void InitializeWorld()
@@ -67,6 +130,82 @@ public class GameLoopService : BackgroundService
             };
             world.AddEntity(monster);
         }
+    }
+
+    /// <summary>
+    /// Add a player from persisted character data.
+    /// </summary>
+    public void AddPlayerFromPersistence(PlayerId playerId, CharacterData characterData)
+    {
+        // Determine spawn position
+        Point spawnPos;
+        WorldId spawnWorld;
+
+        // Check if saved world still exists
+        var savedWorldId = characterData.CurrentWorldId != null
+            ? new WorldId(characterData.CurrentWorldId)
+            : _overworld.Id;
+
+        if (_worlds.ContainsKey(savedWorldId) && savedWorldId != _overworld.Id)
+        {
+            // Instance still exists, spawn there
+            spawnWorld = savedWorldId;
+            spawnPos = new Point(characterData.PositionX, characterData.PositionY);
+        }
+        else
+        {
+            // Spawn at last overworld position (or town if invalid)
+            spawnWorld = _overworld.Id;
+            if (characterData.LastOverworldX > 0 || characterData.LastOverworldY > 0)
+            {
+                spawnPos = new Point(characterData.LastOverworldX, characterData.LastOverworldY);
+            }
+            else
+            {
+                var spawnTown = _overworld.POIs.FirstOrDefault(p => p.Type == POIType.Town);
+                spawnPos = spawnTown?.Position ?? new Point(
+                    WorldConfig.OverworldWidth / 2,
+                    WorldConfig.OverworldHeight / 2
+                );
+            }
+        }
+
+        // Create player state
+        var playerState = new PlayerState
+        {
+            Id = playerId,
+            CharacterId = characterData.Id,
+            Name = characterData.Name,
+            CurrentWorldId = spawnWorld,
+            Position = spawnPos,
+            LastOverworldPosition = new Point(characterData.LastOverworldX, characterData.LastOverworldY)
+        };
+        _players[playerId] = playerState;
+
+        // Create player entity with persisted stats
+        var entity = new Entity
+        {
+            Id = playerId.Value,
+            Name = characterData.Name,
+            Position = spawnPos,
+            Type = EntityType.Player,
+            Health = characterData.Health,
+            MaxHealth = characterData.MaxHealth,
+            Level = characterData.Level,
+            Experience = characterData.Experience,
+            Strength = characterData.Strength,
+            Dexterity = characterData.Dexterity,
+            Stamina = characterData.Stamina,
+            UnspentPoints = characterData.UnspentPoints
+        };
+
+        if (_worlds.TryGetValue(spawnWorld, out var world))
+        {
+            world.AddEntity(entity);
+        }
+
+        _logger.LogInformation("Player {Name} (Character {CharacterId}) joined at {Position} in {World}",
+            characterData.Name, characterData.Id.Value, spawnPos, spawnWorld);
     }
 
     public void AddPlayer(PlayerId playerId, string name)
@@ -128,6 +267,52 @@ public class GameLoopService : BackgroundService
             }
         }
         _playerInputQueues.TryRemove(playerId, out _);
+    }
+
+    /// <summary>
+    /// Remove player and save their state to the database.
+    /// </summary>
+    public async Task RemovePlayerAsync(PlayerId playerId, CharacterId? characterId)
+    {
+        if (_players.TryGetValue(playerId, out var playerState))
+        {
+            // Get entity data before removal
+            var (world, entity) = FindPlayerInternal(playerId);
+
+            // Save state if we have character ID and entity
+            if (characterId != null && entity != null)
+            {
+                // Determine overworld position
+                var (overworldX, overworldY) = playerState.CurrentWorldId == _overworld.Id
+                    ? (entity.Position.X, entity.Position.Y)
+                    : (playerState.LastOverworldPosition.X, playerState.LastOverworldPosition.Y);
+
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+
+                    await persistenceService.SaveVolatileStateAsync(
+                        characterId.Value,
+                        entity.Health,
+                        overworldX,
+                        overworldY,
+                        null, // Always resume in overworld
+                        overworldX,
+                        overworldY
+                    );
+
+                    _logger.LogInformation("Saved volatile state for character {CharacterId}", characterId.Value.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to save volatile state for character {CharacterId}", characterId.Value.Value);
+                }
+            }
+        }
+
+        // Now remove from game
+        RemovePlayer(playerId);
     }
 
     public PlayerState? GetPlayer(PlayerId playerId)
@@ -243,6 +428,9 @@ public class GameLoopService : BackgroundService
             Update();
             await Broadcast();
 
+            // Process pending persistence operations (non-blocking)
+            await ProcessPendingPersistenceOps();
+
             _tick++;
 
             var elapsed = DateTime.UtcNow - startTime;
@@ -250,6 +438,26 @@ public class GameLoopService : BackgroundService
             if (delay > TimeSpan.Zero)
             {
                 await Task.Delay(delay, stoppingToken);
+            }
+        }
+    }
+
+    private async Task ProcessPendingPersistenceOps()
+    {
+        if (_pendingPersistenceOps.IsEmpty) return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+
+        while (_pendingPersistenceOps.TryDequeue(out var operation))
+        {
+            try
+            {
+                await operation(persistenceService);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing persistence operation");
             }
         }
     }
@@ -437,14 +645,31 @@ public class GameLoopService : BackgroundService
             // Record XP gain event for this player
             RecordXpGainEvent(world.Id, new PlayerId(player.Id), ProgressionFormulas.XpPerKill, killedPosition);
 
-            world.UpdateEntity(player with
+            var updatedEntity = player with
             {
                 Experience = newXp,
                 Level = newLevel,
                 UnspentPoints = newUnspent,
                 Health = newHealth,
                 MaxHealth = ProgressionFormulas.MaxHealth(player.Stamina)
-            });
+            };
+            world.UpdateEntity(updatedEntity);
+
+            // Queue persistence operation for progression data
+            var playerId = new PlayerId(player.Id);
+            if (_players.TryGetValue(playerId, out var playerState) && playerState.CharacterId != null)
+            {
+                var charId = playerState.CharacterId.Value;
+                var xp = newXp;
+                var level = newLevel;
+                var str = updatedEntity.Strength;
+                var dex = updatedEntity.Dexterity;
+                var sta = updatedEntity.Stamina;
+                var unspent = newUnspent;
+
+                _pendingPersistenceOps.Enqueue(async svc =>
+                    await svc.SaveProgressionAsync(charId, xp, level, str, dex, sta, unspent));
+            }
         }
     }
 
@@ -491,6 +716,21 @@ public class GameLoopService : BackgroundService
             world.UpdateEntity(updated);
             _logger.LogInformation("Player {PlayerId} allocated point to {Stat}. New value: {Value}",
                 playerId, stat, GetStatValue(updated, stat));
+
+            // Queue persistence operation for stats
+            if (_players.TryGetValue(playerId, out var playerState) && playerState.CharacterId != null)
+            {
+                var charId = playerState.CharacterId.Value;
+                var xp = updated.Experience;
+                var level = updated.Level;
+                var str = updated.Strength;
+                var dex = updated.Dexterity;
+                var sta = updated.Stamina;
+                var unspent = updated.UnspentPoints;
+
+                _pendingPersistenceOps.Enqueue(async svc =>
+                    await svc.SaveProgressionAsync(charId, xp, level, str, dex, sta, unspent));
+            }
         }
     }
 
@@ -518,6 +758,11 @@ public class GameLoopService : BackgroundService
     };
 
     private (WorldState? world, Entity? player) FindPlayer(PlayerId playerId)
+    {
+        return FindPlayerInternal(playerId);
+    }
+
+    private (WorldState? world, Entity? player) FindPlayerInternal(PlayerId playerId)
     {
         if (!_players.TryGetValue(playerId, out var playerState))
             return (null, null);

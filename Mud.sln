@@ -9,9 +9,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Server", "Mud.Server\Mu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Client", "Mud.Client\Mud.Client.csproj", "{2A920EA0-9FF3-4F5B-9618-E27B5F580094}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Shared", "Mud.Shared\Mud.Shared.csproj", "{67158C26-78F7-44D3-BE23-227732380897}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Core", "Mud.Core\Mud.Core.csproj", "{67158C26-78F7-44D3-BE23-227732380897}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Noise", "Mud.Noise\Mud.Noise.csproj", "{9EB36F4A-BCF1-4EB1-BB69-136AAEDD73CB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Infrastructure", "Mud.Infrastructure\Mud.Infrastructure.csproj", "{B1B3F45C-6119-48D4-BF53-29540567EF0C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.DependencyInjection", "Mud.DependencyInjection\Mud.DependencyInjection.csproj", "{E2F108DF-DE97-468F-8F07-4818DBB4E3F3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

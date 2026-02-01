@@ -2,11 +2,18 @@
 @using Microsoft.AspNetCore.Components.Authorization
 
 <CascadingAuthenticationState>
-    <Router AppAssembly="typeof(Routes).Assembly">
+    <Router AppAssembly="typeof(App).Assembly" AdditionalAssemblies="new[] { typeof(Mud.Client.Routes).Assembly }">
         <Found Context="routeData">
             <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Mud.Client.Layout.MainLayout)">
                 <NotAuthorized>
-                    <RedirectToLogin />
+                    @if (context.User.Identity?.IsAuthenticated != true)
+                    {
+                        <RedirectToLogin />
+                    }
+                    else
+                    {
+                        <p>You are not authorized to access this resource.</p>
+                    }
                 </NotAuthorized>
                 <Authorizing>
                     <p>Checking authentication...</p>
@@ -16,3 +23,8 @@
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+}

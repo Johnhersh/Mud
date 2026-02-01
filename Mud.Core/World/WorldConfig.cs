@@ -1,4 +1,4 @@
-namespace Mud.Shared.World;
+namespace Mud.Core.World;
 
 /// <summary>
 /// Configuration constants for world generation

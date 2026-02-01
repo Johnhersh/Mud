@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
-using Mud.Shared;
+using Mud.Core;
 using TypedSignalR.Client;
 
 namespace Mud.Client.Services;
