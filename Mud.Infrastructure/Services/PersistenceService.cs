@@ -46,7 +46,6 @@ public class PersistenceService : IPersistenceService
             MaxHealth = ProgressionFormulas.MaxHealth(ProgressionFormulas.BaseStamina),
             PositionX = 0,
             PositionY = 0,
-            CurrentWorldId = null,
             LastOverworldX = 0,
             LastOverworldY = 0,
             CreatedAt = DateTime.UtcNow,
