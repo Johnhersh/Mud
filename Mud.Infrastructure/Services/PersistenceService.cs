@@ -59,13 +59,13 @@ public class PersistenceService : IPersistenceService
         return ToCharacterData(entity);
     }
 
-    public async Task SaveProgressionAsync(CharacterId characterId, int experience, int level,
+    public async Task UpdateProgressionAsync(CharacterId characterId, int experience, int level,
         int strength, int dexterity, int stamina, int unspentPoints)
     {
         var entity = await _context.Characters.FindAsync(characterId.Value);
-        if (entity == null)
+        if (entity is null)
         {
-            _logger.LogWarning("Character {CharacterId} not found for progression save", characterId.Value);
+            _logger.LogWarning("Character {CharacterId} not found for progression update", characterId.Value);
             return;
         }
 
@@ -76,19 +76,15 @@ public class PersistenceService : IPersistenceService
         entity.Stamina = stamina;
         entity.UnspentPoints = unspentPoints;
         entity.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync();
-        _logger.LogDebug("Saved progression for character {CharacterId}: Level={Level}, XP={XP}",
-            characterId.Value, level, experience);
     }
 
-    public async Task SaveVolatileStateAsync(CharacterId characterId, int health, int positionX, int positionY,
+    public async Task UpdateVolatileStateAsync(CharacterId characterId, int health, int positionX, int positionY,
         string currentWorldId, int lastOverworldX, int lastOverworldY)
     {
         var entity = await _context.Characters.FindAsync(characterId.Value);
-        if (entity == null)
+        if (entity is null)
         {
-            _logger.LogWarning("Character {CharacterId} not found for volatile state save", characterId.Value);
+            _logger.LogWarning("Character {CharacterId} not found for volatile state update", characterId.Value);
             return;
         }
 
@@ -99,18 +95,14 @@ public class PersistenceService : IPersistenceService
         entity.LastOverworldX = lastOverworldX;
         entity.LastOverworldY = lastOverworldY;
         entity.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync();
-        _logger.LogDebug("Saved volatile state for character {CharacterId}: Position=({X},{Y})",
-            characterId.Value, positionX, positionY);
     }
 
-    public async Task SaveAllAsync(CharacterId characterId, CharacterData data)
+    public async Task UpdateAllAsync(CharacterId characterId, CharacterData data)
     {
         var entity = await _context.Characters.FindAsync(characterId.Value);
-        if (entity == null)
+        if (entity is null)
         {
-            _logger.LogWarning("Character {CharacterId} not found for full save", characterId.Value);
+            _logger.LogWarning("Character {CharacterId} not found for full update", characterId.Value);
             return;
         }
 
@@ -128,9 +120,11 @@ public class PersistenceService : IPersistenceService
         entity.LastOverworldX = data.LastOverworldX;
         entity.LastOverworldY = data.LastOverworldY;
         entity.UpdatedAt = DateTime.UtcNow;
+    }
 
+    public async Task FlushAsync()
+    {
         await _context.SaveChangesAsync();
-        _logger.LogDebug("Saved all state for character {CharacterId}", characterId.Value);
     }
 
     private static CharacterData ToCharacterData(CharacterEntity entity)

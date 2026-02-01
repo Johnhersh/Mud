@@ -98,8 +98,10 @@ public class GameLoopService : BackgroundService
                 LastOverworldY = overworldY
             };
 
-            persistenceService.SaveAllAsync(playerState.CharacterId.Value, data).Wait();
+            persistenceService.UpdateAllAsync(playerState.CharacterId.Value, data).Wait();
         }
+
+        persistenceService.FlushAsync().Wait();
     }
 
     private void InitializeWorld()
@@ -301,7 +303,7 @@ public class GameLoopService : BackgroundService
                     using var scope = _scopeFactory.CreateScope();
                     var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
 
-                    await persistenceService.SaveVolatileStateAsync(
+                    await persistenceService.UpdateVolatileStateAsync(
                         characterId.Value,
                         entity.Health,
                         overworldX,
@@ -310,6 +312,7 @@ public class GameLoopService : BackgroundService
                         overworldX,
                         overworldY
                     );
+                    await persistenceService.FlushAsync();
 
                     _logger.LogInformation("Saved volatile state for character {CharacterId}", characterId.Value.Value);
                 }
@@ -469,6 +472,8 @@ public class GameLoopService : BackgroundService
                 _logger.LogError(ex, "Error executing persistence operation");
             }
         }
+
+        await persistenceService.FlushAsync();
     }
 
     private void Update()
@@ -677,7 +682,7 @@ public class GameLoopService : BackgroundService
                 var unspent = newUnspent;
 
                 _pendingPersistenceOps.Enqueue(async svc =>
-                    await svc.SaveProgressionAsync(charId, xp, level, str, dex, sta, unspent));
+                    await svc.UpdateProgressionAsync(charId, xp, level, str, dex, sta, unspent));
             }
         }
     }
@@ -738,7 +743,7 @@ public class GameLoopService : BackgroundService
                 var unspent = updated.UnspentPoints;
 
                 _pendingPersistenceOps.Enqueue(async svc =>
-                    await svc.SaveProgressionAsync(charId, xp, level, str, dex, sta, unspent));
+                    await svc.UpdateProgressionAsync(charId, xp, level, str, dex, sta, unspent));
             }
         }
     }

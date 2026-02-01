@@ -42,21 +42,27 @@ public interface IPersistenceService
     Task<CharacterData> CreateCharacterAsync(AccountId accountId, string name);
 
     /// <summary>
-    /// Save progression data (XP, Level, Stats, UnspentPoints).
-    /// Called immediately when these values change.
+    /// Stage progression data changes (XP, Level, Stats, UnspentPoints).
+    /// Call FlushAsync to commit.
     /// </summary>
-    Task SaveProgressionAsync(CharacterId characterId, int experience, int level,
+    Task UpdateProgressionAsync(CharacterId characterId, int experience, int level,
         int strength, int dexterity, int stamina, int unspentPoints);
 
     /// <summary>
-    /// Save volatile state (Position, Health, CurrentWorldId, LastOverworldPosition).
-    /// Called on player disconnect.
+    /// Stage volatile state changes (Position, Health, CurrentWorldId, LastOverworldPosition).
+    /// Call FlushAsync to commit.
     /// </summary>
-    Task SaveVolatileStateAsync(CharacterId characterId, int health, int positionX, int positionY,
+    Task UpdateVolatileStateAsync(CharacterId characterId, int health, int positionX, int positionY,
         string currentWorldId, int lastOverworldX, int lastOverworldY);
 
     /// <summary>
-    /// Save all state for a character (used during graceful shutdown).
+    /// Stage all state changes for a character.
+    /// Call FlushAsync to commit.
     /// </summary>
-    Task SaveAllAsync(CharacterId characterId, CharacterData data);
+    Task UpdateAllAsync(CharacterId characterId, CharacterData data);
+
+    /// <summary>
+    /// Commit all staged changes to the database.
+    /// </summary>
+    Task FlushAsync();
 }
