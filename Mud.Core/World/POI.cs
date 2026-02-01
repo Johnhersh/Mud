@@ -20,16 +20,16 @@ public enum POIType
 public record POI
 {
     [Key(0)]
-    public string Id { get; init; } = string.Empty;
+    public required string Id { get; init; }
 
     [Key(1)]
-    public Point Position { get; init; } = new(0, 0);
+    public required Point Position { get; init; }
 
     [Key(2)]
-    public POIType Type { get; init; }
+    public required POIType Type { get; init; }
 
     [Key(3)]
-    public float InfluenceRadius { get; init; }
+    public required float InfluenceRadius { get; init; }
 
     /// <summary>
     /// For instances: links back to the parent overworld POI

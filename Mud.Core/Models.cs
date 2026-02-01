@@ -53,35 +53,35 @@ public record LevelUpEvent(
 public record Entity
 {
     [Key(0)]
-    public string Id { get; init; } = string.Empty;
+    public required string Id { get; init; }
     [Key(1)]
-    public string Name { get; init; } = string.Empty;
+    public required string Name { get; init; }
     [Key(2)]
-    public Point Position { get; init; } = new(0, 0);
+    public required Point Position { get; init; }
     [Key(3)]
-    public List<Point> QueuedPath { get; init; } = new();
+    public required List<Point> QueuedPath { get; init; }
     [Key(4)]
-    public EntityType Type { get; init; }
+    public required EntityType Type { get; init; }
     [Key(5)]
-    public int Health { get; init; }
+    public required int Health { get; init; }
     [Key(6)]
-    public int MaxHealth { get; init; }
+    public required int MaxHealth { get; init; }
 
     // Progression
     [Key(7)]
-    public int Level { get; init; } = 1;
+    public required int Level { get; init; }
     [Key(8)]
-    public int Experience { get; init; } = 0;
+    public required int Experience { get; init; }
 
     // Attributes
     [Key(9)]
-    public int Strength { get; init; } = 5;
+    public required int Strength { get; init; }
     [Key(10)]
-    public int Dexterity { get; init; } = 5;
+    public required int Dexterity { get; init; }
     [Key(11)]
-    public int Stamina { get; init; } = 5;
+    public required int Stamina { get; init; }
     [Key(12)]
-    public int UnspentPoints { get; init; } = 0;
+    public required int UnspentPoints { get; init; }
 }
 
 public enum Direction
@@ -107,6 +107,8 @@ public readonly record struct PlayerId([property: Key(0)] string Value)
 [MessagePackObject]
 public readonly record struct WorldId([property: Key(0)] string Value)
 {
+    public static readonly WorldId Overworld = new("overworld");
+
     public override string ToString() => Value;
 }
 
@@ -131,38 +133,38 @@ public readonly record struct AccountId(string Value)
 public record WorldSnapshot
 {
     [Key(0)]
-    public long Tick { get; init; }
+    public required long Tick { get; init; }
 
     [Key(1)]
-    public string WorldId { get; init; } = string.Empty;
+    public required string WorldId { get; init; }
 
     [Key(2)]
-    public WorldType WorldType { get; init; }
+    public required WorldType WorldType { get; init; }
 
     [Key(3)]
-    public List<Entity> Entities { get; init; } = new();
+    public required List<Entity> Entities { get; init; }
 
     [Key(4)]
     public List<TileData>? Tiles { get; init; }  // Flat array, row-major order (y * totalWidth + x)
 
     [Key(5)]
-    public List<POI> POIs { get; init; } = new();
+    public required List<POI> POIs { get; init; }
 
     [Key(6)]
     public Point? ExitMarker { get; init; }
 
     [Key(7)]
-    public int Width { get; init; }
+    public required int Width { get; init; }
 
     [Key(8)]
-    public int Height { get; init; }
+    public required int Height { get; init; }
 
     [Key(9)]
-    public int GhostPadding { get; init; }
+    public required int GhostPadding { get; init; }
 
     [Key(10)]
-    public List<AttackEvent> AttackEvents { get; init; } = new();
+    public required List<AttackEvent> AttackEvents { get; init; }
 
     [Key(11)]
-    public List<LevelUpEvent> LevelUpEvents { get; init; } = new();
+    public required List<LevelUpEvent> LevelUpEvents { get; init; }
 }
