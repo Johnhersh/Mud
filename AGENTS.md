@@ -42,6 +42,18 @@ The solution is divided into three main projects:
   - **Character Sheet**: Press `C` to open/close. Shows level, XP bar, attributes with + buttons, derived stats.
   - **Visuals**: "+25 XP" floating text on kills, "Level Up!" on level gain, level number next to health bars.
 
+## 🗄 State Architecture
+
+State flows through layers with clear ownership. When adding new state, check if it already exists in a higher layer before creating new storage.
+
+1. **Database** (`CharacterEntity`) - Source of truth for persistence. Progression saved immediately; volatile state (health, position) saved on disconnect.
+2. **CharacterCache** - Read-through cache (30min expiry) for progression lookups. Invalidated on write.
+3. **GameLoopService** - Owns ephemeral session state (`_sessions`), world state (`_worlds`), input queues, and per-tick event queues (attacks, XP, level-ups).
+4. **WorldState.Entities** - Per-world entity state (position, health, level). Server is authoritative.
+5. **Client** - Optimistic UI state (local input queue, target selection, render cache). Server state always wins on conflict.
+
+**Principle:** Don't create new dictionaries/caches for data that can be looked up from an existing owner. Add fields to existing records instead of parallel mappings.
+
 ## 🎨 Frontend & Rendering
 
 - **Rendering Engine**: **Phaser 4** with a thin command-based interop layer.
@@ -139,7 +151,12 @@ When the user says to implement a task, look for it in this tasks folder.
 
 When a task is completed and the user says "finalize", "close the task", or "I'm happy with this task", or something similar about ending the task:
 1. **Cleanup**: Delete the corresponding `.md` file from `.agent/tasks/`.
-2. **Documentation**: Update `AGENTS.md` (or other relevant memory files) to reflect the new state of the project, including any new features, architectural changes, or roadmap progress.
+2. **Documentation Review**: Review what was implemented, then read through `AGENTS.md` and verify the documented architecture still matches the code. Look for:
+   - Descriptions that are now outdated or incorrect
+   - New systems/patterns that should be documented
+   - State ownership changes (check the State Architecture section)
+   - Removed or renamed services/classes still mentioned
+   Update any stale documentation and add new sections if needed.
 3. **Verification**: Ensure the project still builds and the todo list is cleared.
 4. **Completion**: Use the `todos` tool to clear the list and provide a concise summary of the final state.
 5. **Git Commit Draft**: Provide a concise (1-2 sentence) summary of the task's purpose and impact, suitable for a git commit message. Focus on "why" and "how" the goal was achieved, rather than listing specific code changes.

@@ -91,6 +91,39 @@ ToBiomes(float, float)
 
 ### HIGH PRIORITY Issues (Always Flag)
 
+**Duplicated State/Data Tracking**: This codebase has multiple layers of state—persistent DB, server-side caches, ephemeral session state, and client-side state. Look for duplication where:
+- Two services maintain parallel mappings of the same relationship (e.g., `ConnectionId → CharacterId` tracked in both `SessionManager` and `GameLoopService._sessions`)
+- Data is stored separately when it could be derived from existing state
+- Multiple dictionaries/caches track overlapping information
+- A new service duplicates lookups already available from an existing service
+
+When found, recommend consolidating to a single source of truth. Ask:
+1. Does this data already exist elsewhere in the system?
+2. Could this be added as a field to an existing record/class instead of a new mapping?
+3. Is there already a service that owns this relationship?
+
+**How to detect duplication:** When reviewing new dictionaries, caches, or mappings:
+- Search for the key type (e.g., `ConnectionId`, `CharacterId`) to find existing lookups
+- Check `GameLoopService` first—it's the main state owner for sessions and worlds
+- Check `WorldState.Entities` for per-entity data (position, health, etc.)
+- Check `CharacterCache` for progression data
+- If the new code creates a `Dictionary<X, Y>`, grep for existing `Dictionary<X,` or properties of type `Y`
+
+```csharp
+// BAD - Duplicated mapping
+class SessionManager {
+    ConcurrentDictionary<string, CharacterId> _connectionToCharacter;  // Duplicates GameLoopService
+}
+class GameLoopService {
+    ConcurrentDictionary<string, PlayerSession> _sessions;  // PlayerSession has CharacterId
+}
+
+// GOOD - Single source of truth
+class GameLoopService {
+    ConcurrentDictionary<string, PlayerSession> _sessions;  // Add AccountId here too
+}
+```
+
 **#pragma Directives**: Any use of `#pragma warning disable` or similar is highly suspect and MUST be flagged for user review. Present pros and cons:
 ```csharp
 // FOUND: #pragma warning disable CS8618
@@ -130,6 +163,7 @@ Silent failures or empty catch blocks are unacceptable.
    - Search for `#pragma` directives (always flag for user review)
    - Search for `[Obsolete]` attribute usage or calls to obsolete APIs
    - Look for dead code, unused variables, unreachable paths
+   - Check for duplicated state: Does new code track data that's already stored elsewhere? (e.g., new dictionaries that duplicate existing mappings in services like `GameLoopService._sessions`)
 3. **Check Structural Patterns**: Pipeline usage, type safety, switch expressions
 4. **Verify Conventions**: Namespaces, record types, MessagePack attributes
 5. **Assess Readability**: Clear naming, appropriate abstraction level
