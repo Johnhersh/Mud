@@ -18,7 +18,9 @@ public record CharacterData
 
     // Volatile state (persisted on disconnect)
     public int Health { get; init; } = 100;
-    public int MaxHealth { get; init; } = 100;
+
+    // Derived from Stamina - not persisted
+    public int MaxHealth => ProgressionFormulas.MaxHealth(Stamina);
     public int PositionX { get; init; } = 0;
     public int PositionY { get; init; } = 0;
     public string CurrentWorldId { get; init; } = WorldId.Overworld.Value;

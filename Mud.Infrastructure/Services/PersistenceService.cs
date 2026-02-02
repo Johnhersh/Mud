@@ -43,7 +43,6 @@ public class PersistenceService : IPersistenceService
             Stamina = ProgressionFormulas.BaseStamina,
             UnspentPoints = 0,
             Health = ProgressionFormulas.MaxHealth(ProgressionFormulas.BaseStamina),
-            MaxHealth = ProgressionFormulas.MaxHealth(ProgressionFormulas.BaseStamina),
             PositionX = 0,
             PositionY = 0,
             LastOverworldX = 0,
@@ -113,7 +112,6 @@ public class PersistenceService : IPersistenceService
         entity.Stamina = data.Stamina;
         entity.UnspentPoints = data.UnspentPoints;
         entity.Health = data.Health;
-        entity.MaxHealth = data.MaxHealth;
         entity.PositionX = data.PositionX;
         entity.PositionY = data.PositionY;
         entity.CurrentWorldId = data.CurrentWorldId;
@@ -140,7 +138,6 @@ public class PersistenceService : IPersistenceService
             Stamina = entity.Stamina,
             UnspentPoints = entity.UnspentPoints,
             Health = entity.Health,
-            MaxHealth = entity.MaxHealth,
             PositionX = entity.PositionX,
             PositionY = entity.PositionY,
             CurrentWorldId = entity.CurrentWorldId,

@@ -27,7 +27,6 @@ public class CharacterEntity
 
     // Volatile state (persisted on disconnect)
     public int Health { get; set; } = 100;
-    public int MaxHealth { get; set; } = 100;
     public int PositionX { get; set; } = 0;
     public int PositionY { get; set; } = 0;
     public string CurrentWorldId { get; set; } = WorldId.Overworld.Value;

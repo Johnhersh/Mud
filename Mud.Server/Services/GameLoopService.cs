@@ -97,7 +97,6 @@ public class GameLoopService : BackgroundService
                 Stamina = progression?.Stamina ?? ProgressionFormulas.BaseStamina,
                 UnspentPoints = progression?.UnspentPoints ?? 0,
                 Health = entity.Health,
-                MaxHealth = entity.MaxHealth,
                 PositionX = overworldX,
                 PositionY = overworldY,
                 CurrentWorldId = WorldId.Overworld.Value,
