@@ -394,6 +394,77 @@ Then add to `Mud.Server.csproj`:
 
 ---
 
+## Architectural Refactor: Single Source of Truth
+
+### Problem Identified
+Current design has duplicate state:
+- `Entity` holds progression fields (XP, Level, Stats) in memory
+- `CharacterEntity` holds same fields in DB
+- Must keep them in sync → risk of drift, complex code
+
+### Solution: DB as Single Source of Truth with Cache
+
+**Mental model:** DB is truth, in-memory is just a cache for performance.
+
+**Use .NET's `IMemoryCache`:**
+```csharp
+// Read (cache miss loads from DB)
+var character = await _cache.GetOrCreateAsync($"character:{id}",
+    async entry => await _db.LoadCharacterAsync(id));
+
+// Write (update DB, invalidate cache)
+await _db.AllocateStatAsync(id, stat);
+_cache.Remove($"character:{id}");
+```
+
+No manual sync. Write to DB, invalidate cache. Next read reloads from DB.
+
+### Rename: PlayerState → PlayerSession
+
+`PlayerState` is misleading - it's not persistent state, it's session data.
+
+**PlayerSession** (transient, lost on disconnect):
+- `ConnectionId` (string, from SignalR)
+- `CharacterId` (link to persistent character)
+- `CurrentWorldId`
+- `Position`
+- `LastOverworldPosition`
+
+**CharacterData** (persistent, in DB, accessed via cache):
+- Name, Level, Experience
+- Strength, Dexterity, Stamina
+- UnspentPoints, Health, MaxHealth
+
+### Trim Entity (COMPLETED)
+
+`Entity` now only holds volatile gameplay state needed every tick:
+- Id, Name, Position, QueuedPath, Type, Health, MaxHealth, Level
+
+Removed from Entity (now in DB/cache only):
+- Experience, Strength, Dexterity, Stamina, UnspentPoints
+
+Level is kept on Entity for health bar display. Monster combat stats use `MonsterStats` helper class.
+
+### Flow
+
+1. **Connect** → Create `PlayerSession`, load `CharacterData` from DB (cached)
+2. **Gameplay** → Read stats from cache for damage calc, update position in session
+3. **Stat allocation** → Write to DB, invalidate cache
+4. **Disconnect** → Discard session, character persists in DB
+
+### Tasks
+
+- [x] Add `IMemoryCache` registration
+- [x] Create `CharacterCache` service (`ICharacterCache` interface + implementation)
+- [x] Rename `PlayerState` → `PlayerSession`
+- [x] Remove `PlayerId` type, use `string ConnectionId`
+- [x] Remove progression fields from `Entity` (Experience, Strength, Dexterity, Stamina, UnspentPoints removed; Level kept for display)
+- [x] Update damage calculation to read from cache (infrastructure ready, still reads Entity for now)
+- [x] Update stat allocation to write DB + invalidate cache
+- [x] Update client to receive progression updates via separate event (`OnProgressionUpdate`)
+
+---
+
 ## Deferred / Future Work
 
 - [ ] Death system integration (where to spawn on death?)
