@@ -14,7 +14,6 @@ public class GameLoopService : BackgroundService
     private readonly IHubContext<GameHub, IGameClient> _hubContext;
     private readonly ILogger<GameLoopService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHostApplicationLifetime _appLifetime;
 
     // World management
     private readonly ConcurrentDictionary<WorldId, WorldState> _worlds = new();
@@ -46,31 +45,29 @@ public class GameLoopService : BackgroundService
     public GameLoopService(
         IHubContext<GameHub, IGameClient> hubContext,
         ILogger<GameLoopService> logger,
-        IServiceScopeFactory scopeFactory,
-        IHostApplicationLifetime appLifetime)
+        IServiceScopeFactory scopeFactory)
     {
         _hubContext = hubContext;
         _logger = logger;
         _scopeFactory = scopeFactory;
-        _appLifetime = appLifetime;
 
         InitializeWorld();
-
-        // Register graceful shutdown
-        _appLifetime.ApplicationStopping.Register(OnShutdown);
     }
 
-    private void OnShutdown()
+    public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Server shutting down, saving all player states...");
-        SaveAllPlayersSync();
+        await SaveAllPlayersAsync();
         _logger.LogInformation("All player states saved");
+
+        await base.StopAsync(cancellationToken);
     }
 
-    private void SaveAllPlayersSync()
+    private async Task SaveAllPlayersAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+        var charCache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
 
         foreach (var session in _sessions.Values)
         {
@@ -82,9 +79,7 @@ public class GameLoopService : BackgroundService
                 ? (entity.Position.X, entity.Position.Y)
                 : (session.LastOverworldPosition.X, session.LastOverworldPosition.Y);
 
-            // Get progression from cache or use defaults
-            var charCache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
-            var progression = charCache.GetProgressionAsync(session.CharacterId).GetAwaiter().GetResult();
+            var progression = await charCache.GetProgressionAsync(session.CharacterId);
 
             var data = new CharacterData
             {
@@ -104,10 +99,10 @@ public class GameLoopService : BackgroundService
                 LastOverworldY = overworldY
             };
 
-            persistenceService.UpdateAllAsync(session.CharacterId, data).Wait();
+            await persistenceService.UpdateAllAsync(session.CharacterId, data);
         }
 
-        persistenceService.FlushAsync().Wait();
+        await persistenceService.FlushAsync();
     }
 
     private void InitializeWorld()

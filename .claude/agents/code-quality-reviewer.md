@@ -149,6 +149,36 @@ class GameLoopService {
 
 When obsolete APIs are called, this often indicates incomplete refactoring or copy-paste from outdated examples. The code should use the current/replacement API instead.
 
+**Sync-over-Async (Blocking on Async Code)**: Synchronous code that calls async methods and blocks on the result is a serious anti-pattern that can cause deadlocks and degrades performance. Look for:
+- `.Result` property access on `Task` or `Task<T>`
+- `.Wait()` calls on tasks
+- `.GetAwaiter().GetResult()` patterns
+- `Task.Run(...).Result` or similar blocking wrappers
+
+```csharp
+// BAD - Blocking on async from sync context
+public void ProcessData()
+{
+    var result = GetDataAsync().Result;  // Can deadlock!
+    // or
+    GetDataAsync().Wait();  // Also blocks
+    // or
+    var data = GetDataAsync().GetAwaiter().GetResult();  // Still blocking
+}
+
+// GOOD - Make the caller async
+public async Task ProcessDataAsync()
+{
+    var result = await GetDataAsync();
+}
+```
+
+When found:
+1. Flag it in the "Requires User Approval" section
+2. The default fix is to make the calling method async (and propagate async up the call chain)
+3. If there's a legitimate reason to keep it synchronous (e.g., implementing a sync interface that cannot be changed, or startup/initialization code where async isn't feasible), the user must explicitly approve it with justification
+4. Present the deadlock risk and performance implications
+
 **Unexpected Situations Without Mitigation**: When code encounters an unexpected state, it should either:
 - Throw an appropriate exception with a clear message
 - Log the situation and gracefully degrade
@@ -164,6 +194,7 @@ Silent failures or empty catch blocks are unacceptable.
    - Search for `[Obsolete]` attribute usage or calls to obsolete APIs
    - Look for dead code, unused variables, unreachable paths
    - Check for duplicated state: Does new code track data that's already stored elsewhere? (e.g., new dictionaries that duplicate existing mappings in services like `GameLoopService._sessions`)
+   - Search for sync-over-async patterns: `.Result`, `.Wait()`, `.GetAwaiter().GetResult()` (flag for user approval)
 3. **Check Structural Patterns**: Pipeline usage, type safety, switch expressions
 4. **Verify Conventions**: Namespaces, record types, MessagePack attributes
 5. **Assess Readability**: Clear naming, appropriate abstraction level
@@ -181,6 +212,7 @@ Highlight patterns done well—reinforces good habits.
 Issues that MUST be explicitly approved by the user before proceeding. This includes:
 - Any `#pragma` directive usage (present pros/cons and alternatives)
 - Calls to obsolete/deprecated APIs (explain what the replacement is)
+- Sync-over-async patterns (`.Result`, `.Wait()`, `.GetAwaiter().GetResult()`) - recommend making caller async unless there's a very good reason
 
 For each item, clearly state:
 1. What was found and where
