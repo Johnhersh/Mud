@@ -55,8 +55,14 @@ public static class InfrastructureRegistration
             options.SlidingExpiration = true;
         });
 
+        // Memory cache for character progression
+        services.AddMemoryCache();
+
         // Persistence service (scoped, tied to DbContext lifetime)
         services.AddScoped<IPersistenceService, PersistenceService>();
+
+        // Character cache (scoped, uses DbContext for cache misses)
+        services.AddScoped<ICharacterCache, CharacterCache>();
 
         // Session manager (singleton for shared state across connections)
         services.AddSingleton<ISessionManager, SessionManager>();

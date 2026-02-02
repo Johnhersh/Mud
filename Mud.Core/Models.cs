@@ -14,6 +14,27 @@ public enum EntityType
     Monster
 }
 
+/// <summary>
+/// Combat stats for monsters (players use CharacterCache instead).
+/// </summary>
+public static class MonsterStats
+{
+    public const int GoblinStrength = 3;
+    public const int GoblinDexterity = 3;
+
+    public static int GetStrength(string monsterName) => monsterName switch
+    {
+        "Goblin" => GoblinStrength,
+        _ => 5
+    };
+
+    public static int GetDexterity(string monsterName) => monsterName switch
+    {
+        "Goblin" => GoblinDexterity,
+        _ => 5
+    };
+}
+
 public enum StatType
 {
     Strength,
@@ -49,6 +70,29 @@ public record LevelUpEvent(
     [property: Key(2)] Point Position
 );
 
+/// <summary>
+/// Sent per-player when their progression changes (XP gain, level up, stat allocation).
+/// </summary>
+[MessagePackObject]
+public record ProgressionUpdate(
+    [property: Key(0)] int Level,
+    [property: Key(1)] int Experience,
+    [property: Key(2)] int Strength,
+    [property: Key(3)] int Dexterity,
+    [property: Key(4)] int Stamina,
+    [property: Key(5)] int UnspentPoints,
+    [property: Key(6)] int MaxHealth
+);
+
+/// <summary>
+/// Data transfer object sent to clients in WorldSnapshot for UI rendering.
+/// Contains only what clients need to draw the game world - position, health bars, levels, etc.
+/// Represents both players and monsters.
+///
+/// This is purely for rendering. Other concerns live elsewhere:
+/// - Session/connection state: PlayerSession (server-side only)
+/// - Persistent character data: CharacterCache/CharacterEntity (sent via OnProgressionUpdate)
+/// </summary>
 [MessagePackObject]
 public record Entity
 {
@@ -66,22 +110,8 @@ public record Entity
     public required int Health { get; init; }
     [Key(6)]
     public required int MaxHealth { get; init; }
-
-    // Progression
     [Key(7)]
     public required int Level { get; init; }
-    [Key(8)]
-    public required int Experience { get; init; }
-
-    // Attributes
-    [Key(9)]
-    public required int Strength { get; init; }
-    [Key(10)]
-    public required int Dexterity { get; init; }
-    [Key(11)]
-    public required int Stamina { get; init; }
-    [Key(12)]
-    public required int UnspentPoints { get; init; }
 }
 
 public enum Direction

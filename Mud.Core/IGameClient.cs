@@ -7,4 +7,5 @@ public interface IGameClient
 {
     Task OnWorldUpdate(WorldSnapshot snapshot);
     Task OnXpGain(List<XpGainEvent> xpEvents);
+    Task OnProgressionUpdate(ProgressionUpdate progression);
 }

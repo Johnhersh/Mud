@@ -15,10 +15,12 @@
 <PageTitle>Mud</PageTitle>
 
 <CharacterSheet IsOpen="_characterSheetOpen" OnClose="CloseCharacterSheet" OnAllocateStat="AllocateStat"
-    PlayerName="@(_playerEntity?.Name ?? "")" Level="@(_playerEntity?.Level ?? 1)"
-    Experience="@(_playerEntity?.Experience ?? 0)" Strength="@(_playerEntity?.Strength ?? 5)"
-    Dexterity="@(_playerEntity?.Dexterity ?? 5)" Stamina="@(_playerEntity?.Stamina ?? 5)"
-    UnspentPoints="@(_playerEntity?.UnspentPoints ?? 0)" />
+    PlayerName="@(_playerEntity?.Name ?? "")" Level="@(_progression?.Level ?? _playerEntity?.Level ?? 1)"
+    Experience="@(_progression?.Experience ?? 0)"
+    Strength="@(_progression?.Strength ?? ProgressionFormulas.BaseStrength)"
+    Dexterity="@(_progression?.Dexterity ?? ProgressionFormulas.BaseDexterity)"
+    Stamina="@(_progression?.Stamina ?? ProgressionFormulas.BaseStamina)"
+    UnspentPoints="@(_progression?.UnspentPoints ?? 0)" />
 
 <div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;"
     id="game-container">
@@ -72,6 +74,7 @@
     private string? _interactionPrompt;
     private bool _characterSheetOpen;
     private Entity? _playerEntity;
+    private ProgressionUpdate? _progression;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -86,6 +89,7 @@
 
             GameClient.OnWorldUpdate += HandleWorldUpdate;
             GameClient.OnXpGain += HandleXpGain;
+            GameClient.OnProgressionUpdate += HandleProgressionUpdate;
             await GameClient.StartAsync();
             _myPlayerId = GameClient.ConnectionId;
 
@@ -132,6 +136,12 @@
     private async void HandleXpGain(List<XpGainEvent> xpEvents)
     {
         await Renderer.ProcessXpEvents(xpEvents);
+    }
+
+    private void HandleProgressionUpdate(ProgressionUpdate progression)
+    {
+        _progression = progression;
+        StateHasChanged();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -267,6 +277,7 @@
     {
         GameClient.OnWorldUpdate -= HandleWorldUpdate;
         GameClient.OnXpGain -= HandleXpGain;
+        GameClient.OnProgressionUpdate -= HandleProgressionUpdate;
     }
 
     private class InteractionInfo

@@ -13,6 +13,7 @@ public class GameClient : IAsyncDisposable, IGameClient
 
     public event Action<WorldSnapshot>? OnWorldUpdate;
     public event Action<List<XpGainEvent>>? OnXpGain;
+    public event Action<ProgressionUpdate>? OnProgressionUpdate;
 
     public GameClient(string baseUri)
     {
@@ -38,6 +39,12 @@ public class GameClient : IAsyncDisposable, IGameClient
     Task IGameClient.OnXpGain(List<XpGainEvent> xpEvents)
     {
         OnXpGain?.Invoke(xpEvents);
+        return Task.CompletedTask;
+    }
+
+    Task IGameClient.OnProgressionUpdate(ProgressionUpdate progression)
+    {
+        OnProgressionUpdate?.Invoke(progression);
         return Task.CompletedTask;
     }
 
