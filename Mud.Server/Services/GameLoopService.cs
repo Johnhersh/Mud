@@ -145,8 +145,22 @@ public class GameLoopService : BackgroundService
     /// <summary>
     /// Add a player from persisted character data.
     /// </summary>
-    public void AddPlayerFromPersistence(string connectionId, CharacterData characterData)
+    /// <summary>
+    /// Add a player from persisted data. Returns kicked connection ID if concurrent login detected.
+    /// </summary>
+    public string? AddPlayerFromPersistence(string connectionId, AccountId accountId, CharacterData characterData)
     {
+        // Check for existing session with same account (concurrent login)
+        string? kickedConnectionId = null;
+        var existingSession = _sessions.Values.FirstOrDefault(s => s.AccountId == accountId);
+        if (existingSession != null)
+        {
+            kickedConnectionId = existingSession.ConnectionId;
+            RemovePlayer(existingSession.ConnectionId);
+            _logger.LogInformation("Kicked existing session {ConnectionId} for account {AccountId}",
+                existingSession.ConnectionId, accountId.Value);
+        }
+
         // Determine spawn position
         Point spawnPos;
         WorldId spawnWorld;
@@ -184,6 +198,7 @@ public class GameLoopService : BackgroundService
         var session = new PlayerSession
         {
             ConnectionId = connectionId,
+            AccountId = accountId,
             CharacterId = characterData.Id,
             Name = characterData.Name,
             CurrentWorldId = spawnWorld,
@@ -212,6 +227,8 @@ public class GameLoopService : BackgroundService
 
         _logger.LogInformation("Player {Name} (Character {CharacterId}) joined at {Position} in {World}",
             characterData.Name, characterData.Id.Value, spawnPos, spawnWorld);
+
+        return kickedConnectionId;
     }
 
     public void RemovePlayer(string connectionId)
@@ -237,15 +254,15 @@ public class GameLoopService : BackgroundService
     /// <summary>
     /// Remove player and save their state to the database.
     /// </summary>
-    public async Task RemovePlayerAsync(string connectionId, CharacterId? characterId)
+    public async Task RemovePlayerAsync(string connectionId)
     {
         if (_sessions.TryGetValue(connectionId, out var session))
         {
             // Get entity data before removal
             var (world, entity) = FindPlayerInternal(connectionId);
 
-            // Save state if we have character ID and entity
-            if (characterId != null && entity != null)
+            // Save state if we have entity
+            if (entity != null)
             {
                 // Determine overworld position
                 var (overworldX, overworldY) = session.CurrentWorldId == _overworld.Id
@@ -258,7 +275,7 @@ public class GameLoopService : BackgroundService
                     var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
 
                     await persistenceService.UpdateVolatileStateAsync(
-                        characterId.Value,
+                        session.CharacterId,
                         entity.Health,
                         overworldX,
                         overworldY,
@@ -268,11 +285,11 @@ public class GameLoopService : BackgroundService
                     );
                     await persistenceService.FlushAsync();
 
-                    _logger.LogInformation("Saved volatile state for character {CharacterId}", characterId.Value.Value);
+                    _logger.LogInformation("Saved volatile state for character {CharacterId}", session.CharacterId.Value);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to save volatile state for character {CharacterId}", characterId.Value.Value);
+                    _logger.LogError(ex, "Failed to save volatile state for character {CharacterId}", session.CharacterId.Value);
                 }
             }
         }

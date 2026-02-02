@@ -63,8 +63,5 @@ public static class InfrastructureRegistration
 
         // Character cache (scoped, uses DbContext for cache misses)
         services.AddScoped<ICharacterCache, CharacterCache>();
-
-        // Session manager (singleton for shared state across connections)
-        services.AddSingleton<ISessionManager, SessionManager>();
     }
 }

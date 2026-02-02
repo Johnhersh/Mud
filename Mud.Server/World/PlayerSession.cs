@@ -8,6 +8,7 @@ namespace Mud.Server.World;
 public class PlayerSession
 {
     public required string ConnectionId { get; init; }
+    public required AccountId AccountId { get; init; }
     public required CharacterId CharacterId { get; init; }
     public required string Name { get; init; }
     public WorldId CurrentWorldId { get; set; }

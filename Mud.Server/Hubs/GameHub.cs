@@ -11,7 +11,6 @@ namespace Mud.Server.Hubs;
 public class GameHub : Hub<IGameClient>, IGameHub
 {
     private readonly GameLoopService _gameLoop;
-    private readonly ISessionManager _sessionManager;
     private readonly IPersistenceService _persistenceService;
     private readonly ICharacterCache _characterCache;
     private readonly ILogger<GameHub> _logger;
@@ -20,13 +19,11 @@ public class GameHub : Hub<IGameClient>, IGameHub
 
     public GameHub(
         GameLoopService gameLoop,
-        ISessionManager sessionManager,
         IPersistenceService persistenceService,
         ICharacterCache characterCache,
         ILogger<GameHub> logger)
     {
         _gameLoop = gameLoop;
-        _sessionManager = sessionManager;
         _persistenceService = persistenceService;
         _characterCache = characterCache;
         _logger = logger;
@@ -49,15 +46,6 @@ public class GameHub : Hub<IGameClient>, IGameHub
             characterData = await _persistenceService.CreateCharacterAsync(accountId, name);
         }
 
-        // Register session (kicks existing if any)
-        var kickedConnectionId = _sessionManager.RegisterSession(ConnectionId, accountId, characterData.Id);
-        if (kickedConnectionId != null)
-        {
-            _logger.LogInformation("Kicked existing session {KickedId} for account {AccountId}",
-                kickedConnectionId, accountId.Value);
-            // Could notify the kicked connection here
-        }
-
         // Pre-populate character cache for fast stat lookups
         _characterCache.Set(characterData.Id, new CharacterProgression
         {
@@ -69,21 +57,18 @@ public class GameHub : Hub<IGameClient>, IGameHub
             UnspentPoints = characterData.UnspentPoints
         });
 
-        // Add player to game with persisted data
-        _gameLoop.AddPlayerFromPersistence(ConnectionId, characterData);
+        // Add player to game (kicks existing session if concurrent login)
+        var kickedConnectionId = _gameLoop.AddPlayerFromPersistence(ConnectionId, accountId, characterData);
+        if (kickedConnectionId != null)
+        {
+            _logger.LogInformation("Kicked existing session {KickedId} for account {AccountId}",
+                kickedConnectionId, accountId.Value);
+        }
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        // Get character ID before removing session
-        var characterId = _sessionManager.GetCharacterId(ConnectionId);
-
-        // Remove session
-        _sessionManager.RemoveSession(ConnectionId);
-
-        // Save and remove player from game loop
-        await _gameLoop.RemovePlayerAsync(ConnectionId, characterId);
-
+        await _gameLoop.RemovePlayerAsync(ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 
