@@ -100,15 +100,7 @@ State flows through layers with clear ownership. When adding new state, check if
   - `executeCommands(commands)`: Processes render commands (CreateSprite, TweenTo, SnapCamera, SetTerrain, etc.).
 - **Location**: JavaScript rendering logic is in `Mud.Server/wwwroot/phaser-renderer.js`.
 
-## 📝 Coding Conventions
-
-- **Namespace**: Follows the project structure (e.g., `Mud.Server.Services`, `Mud.Core.Models`).
-- **Models**: Use `record` types for immutable data structures in `Mud.Core`. Domain entities (`ApplicationUser`, `CharacterEntity`) live in `Mud.Core.Models`.
-- **Dependency Injection**:
-  - `GameLoopService` is registered as a Singleton and a HostedService in the server.
-  - `GameClient` is registered as a Scoped service in the client.
-
-## 🎯 Code Style Preferences
+## 🎯 Code Style & Conventions
 
 ### Pipeline Pattern
 Prefer fluent pipelines that transform data through discrete stages:
@@ -169,19 +161,25 @@ ToBiomes(float, float)
 ### CSS Isolation
 Use Blazor CSS isolation (`Component.razor.css`) instead of inline styles or global CSS.
 
+### Namespaces
+Follow the project structure (e.g., `Mud.Server.Services`, `Mud.Core.Models`).
+
+### Dependency Injection
+- `GameLoopService` is registered as a Singleton and a HostedService in the server.
+- `GameClient` is registered as a Scoped service in the client.
+
 ## ⚠️ Gotchas & Patterns
 
 - **Coordinate System**: The game uses a tile-based coordinate system. Camera is centered on the player by offsetting to (400, 300) on the 800x600 canvas.
 - **Input Handling**: Keyboard events are captured in `Game.razor` and sent to the server via `GameClient.MoveAsync`.
 - **Collision**: Basic wall collision is handled server-side in `GameLoopService.Update()`.
 - **Prerendering**: Interactive WebAssembly components are configured with `prerender: false` in `App.razor` to avoid issues with JS Interop during initial load.
-- **Authentication**: Login/Register pages use Static SSR with `EditForm` and `[SupplyParameterFromForm]`. `ApplicationUser` extends ASP.NET Identity's `IdentityUser`.
 
 ## 📋 Task Planning & Implementation
 
 When the user says they want to plan a new task, or when planning or starting a new task, follow the structured process defined in `.agent/TASK_PLANNING.md`. Read that document and follow it.
 
-When the user says to implement a task, look for it in this tasks folder.
+When the user says to implement a task, look for it in `.agent/tasks/`.
 
 ## 🏁 Task Closing Flow
 
