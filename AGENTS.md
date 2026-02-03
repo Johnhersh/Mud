@@ -4,17 +4,21 @@ This repository contains "Mud", a web-based MMO prototype featuring a retro-futu
 
 ## 🏗 Project Structure
 
-The solution is divided into three main projects:
+The solution is divided into these projects:
 
 - **Mud.Server**: ASP.NET Core Web App. Handles game simulation, authoritative state, and broadcasts world snapshots.
 - **Mud.Client**: Blazor WebAssembly app. Manages UI, input handling, and rendering via Phaser 4.
-- **Mud.Shared**: C# Class Library containing shared models and enums used by both Client and Server.
+- **Mud.Core**: C# Class Library containing shared models, enums, and service interfaces used by both Client and Server.
+  - `Mud.Core.Models`: Domain entities (`ApplicationUser`, `CharacterEntity`) and Identity integration.
+- **Mud.Infrastructure**: EF Core implementations (`MudDbContext`, `PersistenceService`, `CharacterCache`).
+- **Mud.DependencyInjection**: Service registration and configuration.
 
 ## 🛠 Essential Commands
 
 ### Build & Run
 - **Build Solution**: `dotnet build`
 - **Run Server**: `dotnet run --project Mud.Server` (This also hosts the Blazor client)
+- **Server URL**: `http://localhost:5213` (configured in `launchSettings.json`)
 
 ### Testing
 - **Run Tests**: `dotnet test` (Note: No unit tests are currently implemented)
@@ -23,7 +27,7 @@ The solution is divided into three main projects:
 ## 📡 Networking & Serialization
 
 - **Protocol**: SignalR with **MessagePack** binary serialization.
-- **Serialization**: All shared models in `Mud.Shared` must be decorated with `[MessagePackObject]` and properties with `[Key(n)]`.
+- **Serialization**: All shared models in `Mud.Core` must be decorated with `[MessagePackObject]` and properties with `[Key(n)]`.
 - **Game Loop**: The server runs a `BackgroundService` (`GameLoopService`) that ticks every 500ms.
 - **Movement Queuing**: Players can queue up to 5 moves. The server processes one move per tick. Queued paths are rendered with transparency.
 - **Snapshots**: The server broadcasts a `WorldSnapshot` to all clients every tick.
@@ -46,7 +50,7 @@ The solution is divided into three main projects:
 
 State flows through layers with clear ownership. When adding new state, check if it already exists in a higher layer before creating new storage.
 
-1. **Database** (`CharacterEntity`) - Source of truth for persistence. Progression saved immediately; volatile state (health, position) saved on disconnect.
+1. **Database** (`CharacterEntity` in `Mud.Core.Models`) - Source of truth for persistence. Progression saved immediately; volatile state (health, position) saved on disconnect.
 2. **CharacterCache** - Read-through cache (30min expiry) for progression lookups. Invalidated on write.
 3. **GameLoopService** - Owns ephemeral session state (`_sessions`), world state (`_worlds`), input queues, and per-tick event queues (attacks, XP, level-ups).
 4. **WorldState.Entities** - Per-world entity state (position, health, level). Server is authoritative.
@@ -67,8 +71,8 @@ State flows through layers with clear ownership. When adding new state, check if
 
 ## 📝 Coding Conventions
 
-- **Namespace**: Follows the project structure (e.g., `Mud.Server.Services`, `Mud.Shared`).
-- **Models**: Use `record` types for immutable data structures in `Mud.Shared`.
+- **Namespace**: Follows the project structure (e.g., `Mud.Server.Services`, `Mud.Core.Models`).
+- **Models**: Use `record` types for immutable data structures in `Mud.Core`. Domain entities (`ApplicationUser`, `CharacterEntity`) live in `Mud.Core.Models`.
 - **Dependency Injection**:
   - `GameLoopService` is registered as a Singleton and a HostedService in the server.
   - `GameClient` is registered as a Scoped service in the client.
@@ -137,9 +141,10 @@ Use Blazor CSS isolation (`Component.razor.css`) instead of inline styles or glo
 ## ⚠️ Gotchas & Patterns
 
 - **Coordinate System**: The game uses a tile-based coordinate system. Camera is centered on the player by offsetting to (400, 300) on the 800x600 canvas.
-- **Input Handling**: Keyboard events are captured in `Home.razor` and sent to the server via `GameClient.MoveAsync`.
+- **Input Handling**: Keyboard events are captured in `Game.razor` and sent to the server via `GameClient.MoveAsync`.
 - **Collision**: Basic wall collision is handled server-side in `GameLoopService.Update()`.
 - **Prerendering**: Interactive WebAssembly components are configured with `prerender: false` in `App.razor` to avoid issues with JS Interop during initial load.
+- **Authentication**: Login/Register pages use Static SSR with `EditForm` and `[SupplyParameterFromForm]`. `ApplicationUser` extends ASP.NET Identity's `IdentityUser`.
 
 ## 📋 Task Planning & Implementation
 

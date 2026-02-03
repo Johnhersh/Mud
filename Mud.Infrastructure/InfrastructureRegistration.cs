@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Mud.Core.Models;
 using Mud.Core.Services;
 using Mud.Infrastructure.Data;
 using Mud.Infrastructure.Services;
@@ -49,9 +50,9 @@ public static class InfrastructureRegistration
         {
             options.Cookie.HttpOnly = true;
             options.ExpireTimeSpan = TimeSpan.FromDays(7);
-            options.LoginPath = "/";
-            options.LogoutPath = "/logout";
-            options.AccessDeniedPath = "/";
+            options.LoginPath = "/Login";
+            options.LogoutPath = "/Logout";
+            options.AccessDeniedPath = "/Login";
             options.SlidingExpiration = true;
         });
 

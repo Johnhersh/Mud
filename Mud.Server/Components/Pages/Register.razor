@@ -1,0 +1,110 @@
+@page "/Register"
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Mud.Core
+@using Mud.Core.Services
+@using Mud.Core.Models
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject IPersistenceService PersistenceService
+@inject NavigationManager Navigation
+
+<PageTitle>Mud - Register</PageTitle>
+
+<div class="auth-container">
+    <h1>Mud</h1>
+    <p class="subtitle">A retro-futuristic ASCII MMO</p>
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="error-message">@_errorMessage</div>
+    }
+
+    <EditForm Model="Input" FormName="register" method="post" OnValidSubmit="ProcessRegister" Enhance>
+        <DataAnnotationsValidator />
+
+        <div class="form-group">
+            <label for="username">Username</label>
+            <InputText id="username" @bind-Value="Input.Username" class="form-input" autocomplete="username" />
+            <ValidationMessage For="() => Input.Username" class="validation-message" />
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <InputText id="password" @bind-Value="Input.Password" type="password" class="form-input" autocomplete="new-password" />
+            <ValidationMessage For="() => Input.Password" class="validation-message" />
+        </div>
+
+        <div class="form-group">
+            <label for="confirmPassword">Confirm Password</label>
+            <InputText id="confirmPassword" @bind-Value="Input.ConfirmPassword" type="password" class="form-input" autocomplete="new-password" />
+            <ValidationMessage For="() => Input.ConfirmPassword" class="validation-message" />
+        </div>
+
+        <button type="submit" class="submit-btn">Create Account</button>
+    </EditForm>
+
+    <p class="switch-link">
+        Already have an account? <a href="/Login">Login here</a>
+    </p>
+</div>
+
+@code {
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    private string _errorMessage = "";
+
+    public class InputModel
+    {
+        [Required(ErrorMessage = "Username is required")]
+        [MinLength(3, ErrorMessage = "Username must be at least 3 characters")]
+        public string Username { get; set; } = "";
+
+        [Required(ErrorMessage = "Password is required")]
+        [MinLength(4, ErrorMessage = "Password must be at least 4 characters")]
+        public string Password { get; set; } = "";
+
+        [Required(ErrorMessage = "Please confirm your password")]
+        [Compare(nameof(Password), ErrorMessage = "Passwords do not match")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+
+    protected override void OnInitialized()
+    {
+        if (HttpContext?.User?.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/Game", forceLoad: true);
+        }
+    }
+
+    private async Task ProcessRegister()
+    {
+        _errorMessage = "";
+
+        var user = new ApplicationUser
+        {
+            UserName = Input.Username
+        };
+
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (result.Succeeded)
+        {
+            // Create character for this account
+            var accountId = new AccountId(user.Id);
+            await PersistenceService.CreateCharacterAsync(accountId, Input.Username);
+
+            // Sign in and redirect to game
+            await SignInManager.SignInAsync(user, isPersistent: true);
+            HttpContext?.Response.Redirect("/Game");
+        }
+        else
+        {
+            _errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+        }
+    }
+}

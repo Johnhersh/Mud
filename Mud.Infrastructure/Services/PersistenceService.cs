@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Mud.Core;
+using Mud.Core.Models;
 using Mud.Core.Services;
 using Mud.Infrastructure.Data;
 

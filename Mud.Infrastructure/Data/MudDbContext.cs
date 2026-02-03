@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Mud.Core.Models;
 
 namespace Mud.Infrastructure.Data;
 
@@ -26,11 +27,6 @@ public class MudDbContext : IdentityDbContext<ApplicationUser>
 
             entity.HasIndex(c => c.AccountId);
             entity.HasIndex(c => c.Name).IsUnique();
-
-            entity.HasOne(c => c.Account)
-                .WithMany(u => u.Characters)
-                .HasForeignKey(c => c.AccountId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

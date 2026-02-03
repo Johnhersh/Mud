@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using Mud.Core;
 
-namespace Mud.Infrastructure.Data;
+namespace Mud.Core.Models;
 
 /// <summary>
 /// Character database entity.

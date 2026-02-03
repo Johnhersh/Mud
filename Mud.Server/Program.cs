@@ -53,6 +53,5 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(Mud.Client.Routes).Assembly);
 
 app.MapHub<GameHub>("/gamehub");
-app.MapAuthEndpoints();
 
 app.Run();

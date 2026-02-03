@@ -88,7 +88,19 @@ Also check warnings if needed:
 mcp__playwright__browser_console_messages(level: "warning")
 ```
 
-### 7. Report Results
+### 7. Cleanup
+
+Close the browser when done:
+```
+mcp__playwright__browser_close()
+```
+
+Stop the server if you started it:
+```bash
+pkill -f "dotnet.*Mud.Server" || true
+```
+
+### 8. Report Results
 
 Provide a clear summary:
 
@@ -102,18 +114,6 @@ Provide a clear summary:
 - Include console errors if any
 - Reference screenshots showing the problem
 - Suggest what might be wrong based on observations
-
-### 8. Cleanup
-
-Close the browser when done:
-```
-mcp__playwright__browser_close()
-```
-
-Stop the server if you started it:
-```bash
-pkill -f "dotnet.*Mud.Server" || true
-```
 
 ## Tips
 
