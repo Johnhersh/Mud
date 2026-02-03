@@ -13,6 +13,37 @@ The solution is divided into these projects:
 - **Mud.Infrastructure**: EF Core implementations (`MudDbContext`, `PersistenceService`, `CharacterCache`).
 - **Mud.DependencyInjection**: Service registration and configuration.
 
+## 🏛 Architectural Principles
+
+These principles guide all development decisions. Follow them unless there's a compelling reason not to.
+
+### Static SSR by Default
+- All pages render as **Static SSR** (server-rendered HTML with no interactivity)
+- **No Blazor Server interactivity** - avoid `InteractiveServer` render mode entirely
+- **WebAssembly only for the game page** - `Game.razor` uses `InteractiveWebAssembly` because it needs real-time input handling (keyboard events, SignalR)
+- Forms use `EditForm` with `[SupplyParameterFromForm]` and `method="post"` - the server handles the POST during the request, no JS required
+- Never create API endpoints for operations that can be handled by Static SSR form posts
+
+### Domain Models in Core
+- Domain entities (`ApplicationUser`, `CharacterEntity`) live in `Mud.Core.Models`
+- Infrastructure contains only implementations (DbContext, services), not models
+- This keeps the domain portable and prevents circular dependencies
+
+### EF Core Conventions Over Configuration
+- Let EF Core infer relationships from navigation properties
+- Avoid fluent API configuration unless necessary (indexes, default values, constraints)
+- Use navigation properties (`entity.Account`) rather than raw foreign keys (`entity.AccountId`) when traversing relationships
+
+### Project Dependency Direction
+```
+Mud.Server → Mud.DependencyInjection → Mud.Infrastructure → Mud.Core
+                                                          ↗
+Mud.Client ─────────────────────────────────────────────────
+```
+- Core has no dependencies on other Mud projects
+- Infrastructure depends only on Core
+- Server never references Infrastructure directly (goes through DependencyInjection)
+
 ## 🛠 Essential Commands
 
 ### Build & Run
