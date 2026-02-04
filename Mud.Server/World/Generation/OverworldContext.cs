@@ -127,10 +127,10 @@ public static class OverworldContext
     /// </summary>
     private static float BiomeTarget(BiomeType biome) => biome switch
     {
-        BiomeType.Water => WorldConfig.BiomeTargetWater,
-        BiomeType.Plains => WorldConfig.BiomeTargetPlains,
-        BiomeType.Forest => WorldConfig.BiomeTargetForest,
-        _ => WorldConfig.BiomeTargetPlains
+        BiomeType.Water => WorldConfig.WaterThreshold / 2f,
+        BiomeType.Plains => (WorldConfig.WaterThreshold + WorldConfig.PlainsThreshold) / 2f,
+        BiomeType.Forest => (WorldConfig.PlainsThreshold + 1f) / 2f,
+        _ => (WorldConfig.WaterThreshold + WorldConfig.PlainsThreshold) / 2f
     };
 
     /// <summary>
