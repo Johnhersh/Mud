@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using Mud.Shared;
-using Mud.Shared.World;
+using Mud.Core;
+using Mud.Core.World;
 using Mud.Server.World.Generation;
 
 namespace Mud.Server.World;

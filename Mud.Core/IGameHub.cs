@@ -1,4 +1,4 @@
-namespace Mud.Shared;
+namespace Mud.Core;
 
 /// <summary>
 /// Methods the client can call on the server hub.

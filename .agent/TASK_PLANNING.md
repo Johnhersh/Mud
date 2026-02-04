@@ -40,6 +40,9 @@ When the user asks "what should I work on next":
    - Visual requirements (ASCII characters, colors, animations)
    - Scaling concerns (player count, world size)
    - **DO NOT explore code during this phase** - focus on product goals.
+   - **Prefer multiple choice** - Offer 2-4 concrete options rather than open-ended questions when possible.
+   - **Lead with your recommendation** - State which option you'd choose and why.
+   - **Present 2-3 approaches** - Before settling on a direction, briefly present alternatives with trade-offs.
 4. **Create Initial Task Document** - Once broad strokes are understood:
    - Create a `.md` file in `.agent/tasks/` with the objective and what's known so far.
    - Update this document incrementally as each question is answered.
@@ -111,17 +114,47 @@ Each task should be a standalone document in `.agent/tasks/` containing:
 
 ### How to Test Section
 
-Every task document should include a "How to Test" section that tells the implementing agent how to verify the feature works. This section should include:
+Every task document should include a "How to Test" section that tells the implementing agent how to verify the feature works. Testing happens in two phases:
 
-1. **Test instructions** for the `playwright-tester` agent
-2. **The Task tool call** to spawn the testing agent
+1. **Code Quality Review** - Run the `code-quality-reviewer` agent first to catch issues that may require code changes
+2. **Visual/Functional Testing** - Run the `playwright-tester` agent to verify the feature works in the browser
+
+**IMPORTANT:** Always run code quality review BEFORE playwright testing. The code quality reviewer may identify issues (pragmas, obsolete API calls, dead code, etc.) that require fixes. Address any issues before proceeding to visual testing.
 
 Template:
 
 ```markdown
 ## How to Test
 
-After implementation is complete, spawn the `playwright-tester` agent:
+### Step 1: Code Quality Review
+
+After implementation is complete, first run the code quality reviewer:
+
+\`\`\`
+Task(
+  subagent_type: "code-quality-reviewer",
+  description: "Review [feature name] code",
+  prompt: """
+  Review the code changes for [feature name].
+
+  **Files changed:**
+  - [List of modified files]
+
+  **What to look for:**
+  - Any #pragma directives (require user approval)
+  - Calls to obsolete/deprecated APIs
+  - Dead code or unused variables
+  - Proper error handling for unexpected situations
+  - Adherence to project coding patterns
+  """
+)
+\`\`\`
+
+Address any issues flagged by the reviewer before proceeding to visual testing.
+
+### Step 2: Visual/Functional Testing
+
+Once code quality is verified, spawn the `playwright-tester` agent:
 
 \`\`\`
 Task(
@@ -148,7 +181,31 @@ Example:
 ```markdown
 ## How to Test
 
-After implementation is complete, spawn the `playwright-tester` agent:
+### Step 1: Code Quality Review
+
+\`\`\`
+Task(
+  subagent_type: "code-quality-reviewer",
+  description: "Review XP system code",
+  prompt: """
+  Review the code changes for the XP gain feature.
+
+  **Files changed:**
+  - Mud.Server/Services/GameLoopService.cs
+  - Mud.Shared/Models.cs
+  - Mud.Client/Services/GameRenderer.cs
+
+  **What to look for:**
+  - Any #pragma directives (require user approval)
+  - Calls to obsolete/deprecated APIs
+  - Dead code or unused variables
+  - Proper error handling for unexpected situations
+  - Adherence to project coding patterns
+  """
+)
+\`\`\`
+
+### Step 2: Visual/Functional Testing
 
 \`\`\`
 Task(

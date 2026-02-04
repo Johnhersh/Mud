@@ -1,5 +1,5 @@
-using Mud.Shared;
-using Mud.Shared.World;
+using Mud.Core;
+using Mud.Core.World;
 using NoiseDotNet;
 
 namespace Mud.Server.World.Generation;

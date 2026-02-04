@@ -1,4 +1,4 @@
-namespace Mud.Shared;
+namespace Mud.Core;
 
 /// <summary>
 /// Constants and calculations for player progression.

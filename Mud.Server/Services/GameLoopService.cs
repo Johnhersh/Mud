@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.SignalR;
 using Mud.Server.Hubs;
 using Mud.Server.World;
 using Mud.Server.World.Generation;
-using Mud.Shared;
-using Mud.Shared.World;
+using Mud.Core;
+using Mud.Core.World;
+using Mud.Core.Services;
 
 namespace Mud.Server.Services;
 
@@ -12,31 +13,96 @@ public class GameLoopService : BackgroundService
 {
     private readonly IHubContext<GameHub, IGameClient> _hubContext;
     private readonly ILogger<GameLoopService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     // World management
     private readonly ConcurrentDictionary<WorldId, WorldState> _worlds = new();
     private WorldState _overworld = null!;
 
-    // Player tracking
-    private readonly ConcurrentDictionary<PlayerId, PlayerState> _players = new();
-    private readonly ConcurrentDictionary<PlayerId, ConcurrentQueue<Direction>> _playerInputQueues = new();
+    // Player tracking (keyed by SignalR ConnectionId)
+    private readonly ConcurrentDictionary<string, PlayerSession> _sessions = new();
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<Direction>> _playerInputQueues = new();
 
     // Attack events per world (cleared after each broadcast)
     private readonly ConcurrentDictionary<WorldId, ConcurrentBag<AttackEvent>> _worldAttackEvents = new();
 
-    // XP events: keyed by world, then by player (for per-player sends)
-    private readonly ConcurrentDictionary<WorldId, ConcurrentDictionary<PlayerId, List<XpGainEvent>>> _worldPlayerXpEvents = new();
+    // XP events: keyed by world, then by connection ID (for per-player sends)
+    private readonly ConcurrentDictionary<WorldId, ConcurrentDictionary<string, List<XpGainEvent>>> _worldPlayerXpEvents = new();
 
     // Level-up events: keyed by world only (broadcast to all in world)
     private readonly ConcurrentDictionary<WorldId, ConcurrentBag<LevelUpEvent>> _worldLevelUpEvents = new();
 
+    // Progression updates: keyed by connection ID (sent per-player when their progression changes)
+    private readonly ConcurrentDictionary<string, ProgressionUpdate> _pendingProgressionUpdates = new();
+
+    // Pending persistence operations (processed async to not block game loop)
+    private readonly ConcurrentQueue<PersistenceOp> _pendingPersistenceOps = new();
+
+    private record PersistenceOp(CharacterId CharacterId, Func<IPersistenceService, Task> Operation);
+
     private long _tick = 0;
 
-    public GameLoopService(IHubContext<GameHub, IGameClient> hubContext, ILogger<GameLoopService> logger)
+    public GameLoopService(
+        IHubContext<GameHub, IGameClient> hubContext,
+        ILogger<GameLoopService> logger,
+        IServiceScopeFactory scopeFactory)
     {
         _hubContext = hubContext;
         _logger = logger;
+        _scopeFactory = scopeFactory;
+
         InitializeWorld();
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Server shutting down, saving all player states...");
+        await SaveAllPlayersAsync();
+        _logger.LogInformation("All player states saved");
+
+        await base.StopAsync(cancellationToken);
+    }
+
+    private async Task SaveAllPlayersAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+        var charCache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
+
+        foreach (var session in _sessions.Values)
+        {
+            var (world, entity) = FindPlayerInternal(session.ConnectionId);
+            if (entity == null) continue;
+
+            // Determine overworld position for resume
+            var (overworldX, overworldY) = session.CurrentWorldId == _overworld.Id
+                ? (entity.Position.X, entity.Position.Y)
+                : (session.LastOverworldPosition.X, session.LastOverworldPosition.Y);
+
+            var progression = await charCache.GetProgressionAsync(session.CharacterId);
+
+            var data = new CharacterData
+            {
+                Id = session.CharacterId,
+                Name = entity.Name,
+                Level = progression?.Level ?? 1,
+                Experience = progression?.Experience ?? 0,
+                Strength = progression?.Strength ?? ProgressionFormulas.BaseStrength,
+                Dexterity = progression?.Dexterity ?? ProgressionFormulas.BaseDexterity,
+                Stamina = progression?.Stamina ?? ProgressionFormulas.BaseStamina,
+                UnspentPoints = progression?.UnspentPoints ?? 0,
+                Health = entity.Health,
+                PositionX = overworldX,
+                PositionY = overworldY,
+                CurrentWorldId = WorldId.Overworld.Value,
+                LastOverworldX = overworldX,
+                LastOverworldY = overworldY
+            };
+
+            await persistenceService.UpdateAllAsync(session.CharacterId, data);
+        }
+
+        await persistenceService.FlushAsync();
     }
 
     private void InitializeWorld()
@@ -61,63 +127,113 @@ public class GameLoopService : BackgroundService
                 Id = $"monster_{world.Id}_{i}",
                 Name = "Goblin",
                 Position = pos,
+                QueuedPath = new List<Point>(),
                 Type = EntityType.Monster,
                 Health = 50,
-                MaxHealth = 50
+                MaxHealth = 50,
+                Level = 1
             };
             world.AddEntity(monster);
         }
     }
 
-    public void AddPlayer(PlayerId playerId, string name)
+    /// <summary>
+    /// Add a player from persisted character data.
+    /// </summary>
+    /// <summary>
+    /// Add a player from persisted data. Returns kicked connection ID if concurrent login detected.
+    /// </summary>
+    public string? AddPlayerFromPersistence(string connectionId, AccountId accountId, CharacterData characterData)
     {
-        // Spawn at town, or center of map if no town exists
-        var spawnTown = _overworld.POIs.FirstOrDefault(p => p.Type == POIType.Town);
-        var spawnPos = spawnTown?.Position ?? new Point(
-            WorldConfig.OverworldWidth / 2,
-            WorldConfig.OverworldHeight / 2
-        );
-
-        // Create player state
-        var playerState = new PlayerState
+        // Check for existing session with same account (concurrent login)
+        string? kickedConnectionId = null;
+        var existingSession = _sessions.Values.FirstOrDefault(s => s.AccountId == accountId);
+        if (existingSession != null)
         {
-            Id = playerId,
-            Name = name,
-            CurrentWorldId = _overworld.Id,
-            Position = spawnPos,
-            LastOverworldPosition = spawnPos
-        };
-        _players[playerId] = playerState;
+            kickedConnectionId = existingSession.ConnectionId;
+            RemovePlayer(existingSession.ConnectionId);
+            _logger.LogInformation("Kicked existing session {ConnectionId} for account {AccountId}",
+                existingSession.ConnectionId, accountId.Value);
+        }
 
-        // Create player entity in overworld with initial stats
-        var initialMaxHealth = ProgressionFormulas.MaxHealth(ProgressionFormulas.BaseStamina);
+        // Determine spawn position
+        Point spawnPos;
+        WorldId spawnWorld;
+
+        // Check if saved world still exists
+        var savedWorldId = characterData.CurrentWorldId != null
+            ? new WorldId(characterData.CurrentWorldId)
+            : _overworld.Id;
+
+        if (_worlds.ContainsKey(savedWorldId) && savedWorldId != _overworld.Id)
+        {
+            // Instance still exists, spawn there
+            spawnWorld = savedWorldId;
+            spawnPos = new Point(characterData.PositionX, characterData.PositionY);
+        }
+        else
+        {
+            // Spawn at last overworld position (or town if invalid)
+            spawnWorld = _overworld.Id;
+            if (characterData.LastOverworldX > 0 || characterData.LastOverworldY > 0)
+            {
+                spawnPos = new Point(characterData.LastOverworldX, characterData.LastOverworldY);
+            }
+            else
+            {
+                var spawnTown = _overworld.POIs.FirstOrDefault(p => p.Type == POIType.Town);
+                spawnPos = spawnTown?.Position ?? new Point(
+                    WorldConfig.OverworldWidth / 2,
+                    WorldConfig.OverworldHeight / 2
+                );
+            }
+        }
+
+        // Create player session
+        var session = new PlayerSession
+        {
+            ConnectionId = connectionId,
+            AccountId = accountId,
+            CharacterId = characterData.Id,
+            Name = characterData.Name,
+            CurrentWorldId = spawnWorld,
+            Position = spawnPos,
+            LastOverworldPosition = new Point(characterData.LastOverworldX, characterData.LastOverworldY)
+        };
+        _sessions[connectionId] = session;
+
+        // Create player entity (volatile state only - progression lives in cache)
         var entity = new Entity
         {
-            Id = playerId.Value,
-            Name = name,
+            Id = connectionId,
+            Name = characterData.Name,
             Position = spawnPos,
+            QueuedPath = new List<Point>(),
             Type = EntityType.Player,
-            Health = initialMaxHealth,
-            MaxHealth = initialMaxHealth,
-            Level = 1,
-            Experience = 0,
-            Strength = ProgressionFormulas.BaseStrength,
-            Dexterity = ProgressionFormulas.BaseDexterity,
-            Stamina = ProgressionFormulas.BaseStamina,
-            UnspentPoints = 0
+            Health = characterData.Health,
+            MaxHealth = characterData.MaxHealth,
+            Level = characterData.Level
         };
-        _overworld.AddEntity(entity);
-        _logger.LogInformation("Player {Name} joined at {Position}", name, spawnPos);
+
+        if (_worlds.TryGetValue(spawnWorld, out var world))
+        {
+            world.AddEntity(entity);
+        }
+
+        _logger.LogInformation("Player {Name} (Character {CharacterId}) joined at {Position} in {World}",
+            characterData.Name, characterData.Id.Value, spawnPos, spawnWorld);
+
+        return kickedConnectionId;
     }
 
-    public void RemovePlayer(PlayerId playerId)
+    public void RemovePlayer(string connectionId)
     {
-        if (_players.TryRemove(playerId, out var playerState))
+        if (_sessions.TryRemove(connectionId, out var session))
         {
             // Remove from current world
-            if (_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+            if (_worlds.TryGetValue(session.CurrentWorldId, out var world))
             {
-                world.RemoveEntity(playerId.Value);
+                world.RemoveEntity(connectionId);
 
                 // Clean up instance if empty
                 if (world.Type == WorldType.Instance && !world.GetPlayers().Any())
@@ -127,12 +243,59 @@ public class GameLoopService : BackgroundService
                 }
             }
         }
-        _playerInputQueues.TryRemove(playerId, out _);
+        _playerInputQueues.TryRemove(connectionId, out _);
     }
 
-    public PlayerState? GetPlayer(PlayerId playerId)
+    /// <summary>
+    /// Remove player and save their state to the database.
+    /// </summary>
+    public async Task RemovePlayerAsync(string connectionId)
     {
-        return _players.TryGetValue(playerId, out var player) ? player : null;
+        if (_sessions.TryGetValue(connectionId, out var session))
+        {
+            // Get entity data before removal
+            var (world, entity) = FindPlayerInternal(connectionId);
+
+            // Save state if we have entity
+            if (entity != null)
+            {
+                // Determine overworld position
+                var (overworldX, overworldY) = session.CurrentWorldId == _overworld.Id
+                    ? (entity.Position.X, entity.Position.Y)
+                    : (session.LastOverworldPosition.X, session.LastOverworldPosition.Y);
+
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+
+                    await persistenceService.UpdateVolatileStateAsync(
+                        session.CharacterId,
+                        entity.Health,
+                        overworldX,
+                        overworldY,
+                        WorldId.Overworld.Value,
+                        overworldX,
+                        overworldY
+                    );
+                    await persistenceService.FlushAsync();
+
+                    _logger.LogInformation("Saved volatile state for character {CharacterId}", session.CharacterId.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to save volatile state for character {CharacterId}", session.CharacterId.Value);
+                }
+            }
+        }
+
+        // Now remove from game
+        RemovePlayer(connectionId);
+    }
+
+    public PlayerSession? GetSession(string connectionId)
+    {
+        return _sessions.TryGetValue(connectionId, out var session) ? session : null;
     }
 
     public WorldState? GetWorld(WorldId worldId)
@@ -140,40 +303,40 @@ public class GameLoopService : BackgroundService
         return _worlds.TryGetValue(worldId, out var world) ? world : null;
     }
 
-    public void EnqueueInput(PlayerId playerId, Direction direction)
+    public void EnqueueInput(string connectionId, Direction direction)
     {
-        var queue = _playerInputQueues.GetOrAdd(playerId, _ => new ConcurrentQueue<Direction>());
+        var queue = _playerInputQueues.GetOrAdd(connectionId, _ => new ConcurrentQueue<Direction>());
         if (queue.Count < 5)
         {
             queue.Enqueue(direction);
         }
     }
 
-    public void Interact(PlayerId playerId)
+    public void Interact(string connectionId)
     {
-        if (!_players.TryGetValue(playerId, out var playerState))
+        if (!_sessions.TryGetValue(connectionId, out var session))
             return;
 
-        if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+        if (!_worlds.TryGetValue(session.CurrentWorldId, out var world))
             return;
 
-        var entity = world.GetEntity(playerId.Value);
+        var entity = world.GetEntity(connectionId);
         if (entity == null) return;
 
         if (world.Type == WorldType.Overworld)
         {
             // Check for POI
             var poi = world.GetPOIAt(entity.Position);
-            if (poi is not null) EnterInstance(playerState, poi, world, entity);
+            if (poi is not null) EnterInstance(session, poi, world, entity);
         }
         else // Instance
         {
             // Check for exit
-            if (world.IsExitMarker(entity.Position)) ExitInstance(playerState, world, entity);
+            if (world.IsExitMarker(entity.Position)) ExitInstance(session, world, entity);
         }
     }
 
-    private void EnterInstance(PlayerState playerState, POI poi, WorldState overworld, Entity entity)
+    private void EnterInstance(PlayerSession session, POI poi, WorldState overworld, Entity entity)
     {
         var instanceId = new WorldId($"instance_{poi.Id}");
 
@@ -195,36 +358,36 @@ public class GameLoopService : BackgroundService
         );
 
         // Save overworld position
-        playerState.SaveOverworldPosition();
+        session.SaveOverworldPosition();
 
         // Remove from overworld
-        overworld.RemoveEntity(playerState.Id.Value);
+        overworld.RemoveEntity(session.ConnectionId);
 
         // Add to instance
         var newEntity = entity with { Position = spawnPos, QueuedPath = new List<Point>() };
         instance.AddEntity(newEntity);
 
-        // Update player state
-        playerState.TransferToWorld(instanceId, spawnPos);
-        _logger.LogInformation("Player {PlayerId} entered instance {InstanceId}", playerState.Id, instanceId);
+        // Update session
+        session.TransferToWorld(instanceId, spawnPos);
+        _logger.LogInformation("Player {ConnectionId} entered instance {InstanceId}", session.ConnectionId, instanceId);
     }
 
-    private void ExitInstance(PlayerState playerState, WorldState instance, Entity entity)
+    private void ExitInstance(PlayerSession session, WorldState instance, Entity entity)
     {
         // Remove from instance
-        instance.RemoveEntity(playerState.Id.Value);
+        instance.RemoveEntity(session.ConnectionId);
 
         // Add back to overworld
         var newEntity = entity with
         {
-            Position = playerState.LastOverworldPosition,
+            Position = session.LastOverworldPosition,
             QueuedPath = new List<Point>()
         };
         _overworld.AddEntity(newEntity);
 
-        // Update player state
-        playerState.TransferToWorld(_overworld.Id, playerState.LastOverworldPosition);
-        _logger.LogInformation("Player {PlayerId} exited to overworld", playerState.Id);
+        // Update session
+        session.TransferToWorld(_overworld.Id, session.LastOverworldPosition);
+        _logger.LogInformation("Player {ConnectionId} exited to overworld", session.ConnectionId);
 
         // Clean up instance if empty
         if (!instance.GetPlayers().Any())
@@ -243,6 +406,9 @@ public class GameLoopService : BackgroundService
             Update();
             await Broadcast();
 
+            // Process pending persistence operations (non-blocking)
+            await ProcessPendingPersistenceOps();
+
             _tick++;
 
             var elapsed = DateTime.UtcNow - startTime;
@@ -251,6 +417,38 @@ public class GameLoopService : BackgroundService
             {
                 await Task.Delay(delay, stoppingToken);
             }
+        }
+    }
+
+    private async Task ProcessPendingPersistenceOps()
+    {
+        if (_pendingPersistenceOps.IsEmpty) return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var persistenceService = scope.ServiceProvider.GetRequiredService<IPersistenceService>();
+        var characterCache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
+
+        var affectedCharacters = new HashSet<CharacterId>();
+
+        while (_pendingPersistenceOps.TryDequeue(out var op))
+        {
+            try
+            {
+                await op.Operation(persistenceService);
+                affectedCharacters.Add(op.CharacterId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing persistence operation for character {CharacterId}", op.CharacterId);
+            }
+        }
+
+        await persistenceService.FlushAsync();
+
+        // Invalidate cache for all affected characters
+        foreach (var charId in affectedCharacters)
+        {
+            characterCache.Invalidate(charId);
         }
     }
 
@@ -268,8 +466,8 @@ public class GameLoopService : BackgroundService
         var players = world.GetPlayers().ToList();
         foreach (var playerEntity in players)
         {
-            var playerId = new PlayerId(playerEntity.Id);
-            if (!_playerInputQueues.TryGetValue(playerId, out var queue) || !queue.TryDequeue(out var direction))
+            var connectionId = playerEntity.Id;
+            if (!_playerInputQueues.TryGetValue(connectionId, out var queue) || !queue.TryDequeue(out var direction))
             {
                 continue;
             }
@@ -331,10 +529,10 @@ public class GameLoopService : BackgroundService
                     QueuedPath = queuedPath
                 });
 
-                // Update player state position
-                if (_players.TryGetValue(playerId, out var pState))
+                // Update session position
+                if (_sessions.TryGetValue(connectionId, out var session))
                 {
-                    pState.Position = newPos;
+                    session.Position = newPos;
                 }
             }
             else
@@ -352,10 +550,13 @@ public class GameLoopService : BackgroundService
         var target = world.GetEntity(targetId);
         if (attacker is null || target is null) return;
 
+        // Get attack stats: from cache for players, from MonsterStats for monsters
+        var (strength, dexterity) = GetAttackStats(attacker);
+
         // Calculate damage from attributes
         int damage = isMelee
-            ? ProgressionFormulas.MeleeDamage(attacker.Strength)
-            : ProgressionFormulas.RangedDamage(attacker.Dexterity);
+            ? ProgressionFormulas.MeleeDamage(strength)
+            : ProgressionFormulas.RangedDamage(dexterity);
 
         var targetPosition = target.Position;
         var newHealth = target.Health - damage;
@@ -384,16 +585,39 @@ public class GameLoopService : BackgroundService
         attackBag.Add(attackEvent);
     }
 
-    public void ProcessRangedAttack(PlayerId attackerId, string targetId)
+    private (int Strength, int Dexterity) GetAttackStats(Entity attacker)
+    {
+        if (attacker.Type == EntityType.Monster)
+        {
+            return (MonsterStats.GetStrength(attacker.Name), MonsterStats.GetDexterity(attacker.Name));
+        }
+
+        // For players, get from cache
+        if (_sessions.TryGetValue(attacker.Id, out var session))
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var cache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
+            var progression = cache.GetProgressionAsync(session.CharacterId).GetAwaiter().GetResult();
+            if (progression != null)
+            {
+                return (progression.Strength, progression.Dexterity);
+            }
+        }
+
+        // Fallback to base stats
+        return (ProgressionFormulas.BaseStrength, ProgressionFormulas.BaseDexterity);
+    }
+
+    public void ProcessRangedAttack(string connectionId, string targetId)
     {
         // Find player's current world
-        if (!_players.TryGetValue(attackerId, out var playerState))
+        if (!_sessions.TryGetValue(connectionId, out var session))
             return;
 
-        if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+        if (!_worlds.TryGetValue(session.CurrentWorldId, out var world))
             return;
 
-        ProcessAttack(world, attackerId.Value, targetId, isMelee: false);
+        ProcessAttack(world, connectionId, targetId, isMelee: false);
     }
 
     private void AwardXpToInstance(WorldState world, Point killedPosition)
@@ -402,12 +626,21 @@ public class GameLoopService : BackgroundService
 
         foreach (var player in players)
         {
-            // Skip players at max level
-            if (player.Level >= ProgressionFormulas.MaxLevel) continue;
+            // Need session to get character ID for cache lookup
+            if (!_sessions.TryGetValue(player.Id, out var session)) continue;
 
-            var newXp = player.Experience + ProgressionFormulas.XpPerKill;
-            var newLevel = player.Level;
-            var newUnspent = player.UnspentPoints;
+            // Get current progression from cache
+            using var scope = _scopeFactory.CreateScope();
+            var cache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
+            var progression = cache.GetProgressionAsync(session.CharacterId).GetAwaiter().GetResult();
+            if (progression == null) continue;
+
+            // Skip players at max level
+            if (progression.Level >= ProgressionFormulas.MaxLevel) continue;
+
+            var newXp = progression.Experience + ProgressionFormulas.XpPerKill;
+            var newLevel = progression.Level;
+            var newUnspent = progression.UnspentPoints;
             var newHealth = player.Health;
             var leveledUp = false;
 
@@ -427,31 +660,56 @@ public class GameLoopService : BackgroundService
             }
 
             // Full heal on level up
+            var newMaxHealth = ProgressionFormulas.MaxHealth(progression.Stamina);
             if (leveledUp)
             {
-                newHealth = ProgressionFormulas.MaxHealth(player.Stamina);
+                newHealth = newMaxHealth;
                 RecordLevelUpEvent(world.Id, player.Id, newLevel, player.Position);
-                _logger.LogInformation("Player {PlayerId} leveled up to {Level}", player.Id, newLevel);
+                _logger.LogInformation("Player {ConnectionId} leveled up to {Level}", player.Id, newLevel);
             }
 
             // Record XP gain event for this player
-            RecordXpGainEvent(world.Id, new PlayerId(player.Id), ProgressionFormulas.XpPerKill, killedPosition);
+            RecordXpGainEvent(world.Id, player.Id, ProgressionFormulas.XpPerKill, killedPosition);
 
-            world.UpdateEntity(player with
+            // Update entity (only volatile fields: Level, Health, MaxHealth)
+            var updatedEntity = player with
             {
-                Experience = newXp,
                 Level = newLevel,
-                UnspentPoints = newUnspent,
                 Health = newHealth,
-                MaxHealth = ProgressionFormulas.MaxHealth(player.Stamina)
-            });
+                MaxHealth = newMaxHealth
+            };
+            world.UpdateEntity(updatedEntity);
+
+            // Record progression update for this player
+            var progressionUpdate = new ProgressionUpdate(
+                newLevel,
+                newXp,
+                progression.Strength,
+                progression.Dexterity,
+                progression.Stamina,
+                newUnspent,
+                newMaxHealth
+            );
+            _pendingProgressionUpdates[player.Id] = progressionUpdate;
+
+            // Queue persistence operation for progression data
+            var charId = session.CharacterId;
+            var xp = newXp;
+            var level = newLevel;
+            var str = progression.Strength;
+            var dex = progression.Dexterity;
+            var sta = progression.Stamina;
+            var unspent = newUnspent;
+
+            _pendingPersistenceOps.Enqueue(new PersistenceOp(charId, async svc =>
+                await svc.UpdateProgressionAsync(charId, xp, level, str, dex, sta, unspent)));
         }
     }
 
-    private void RecordXpGainEvent(WorldId worldId, PlayerId playerId, int amount, Point position)
+    private void RecordXpGainEvent(WorldId worldId, string connectionId, int amount, Point position)
     {
-        var playerXpEvents = _worldPlayerXpEvents.GetOrAdd(worldId, _ => new ConcurrentDictionary<PlayerId, List<XpGainEvent>>());
-        var xpList = playerXpEvents.GetOrAdd(playerId, _ => []);
+        var playerXpEvents = _worldPlayerXpEvents.GetOrAdd(worldId, _ => new ConcurrentDictionary<string, List<XpGainEvent>>());
+        var xpList = playerXpEvents.GetOrAdd(connectionId, _ => []);
         lock (xpList)
         {
             xpList.Add(new XpGainEvent(amount, position));
@@ -464,79 +722,107 @@ public class GameLoopService : BackgroundService
         levelUpBag.Add(new LevelUpEvent(playerId, newLevel, position));
     }
 
-    public void AllocateStat(PlayerId playerId, StatType stat)
+    public void AllocateStat(string connectionId, StatType stat)
     {
-        var (world, player) = FindPlayer(playerId);
+        var (world, player) = FindPlayer(connectionId);
         if (world == null || player == null) return;
-        if (player.UnspentPoints <= 0) return;
 
-        var updated = stat switch
-        {
-            StatType.Strength => player with
-            {
-                Strength = player.Strength + 1,
-                UnspentPoints = player.UnspentPoints - 1
-            },
-            StatType.Dexterity => player with
-            {
-                Dexterity = player.Dexterity + 1,
-                UnspentPoints = player.UnspentPoints - 1
-            },
-            StatType.Stamina => AllocateStamina(player),
-            _ => player
-        };
+        // Need session to get character ID for cache lookup
+        if (!_sessions.TryGetValue(connectionId, out var session)) return;
 
-        if (updated != player)
+        // Get current progression from cache
+        using var scope = _scopeFactory.CreateScope();
+        var cache = scope.ServiceProvider.GetRequiredService<ICharacterCache>();
+        var progression = cache.GetProgressionAsync(session.CharacterId).GetAwaiter().GetResult();
+        if (progression == null || progression.UnspentPoints <= 0) return;
+
+        // Calculate new stats
+        var newStr = progression.Strength;
+        var newDex = progression.Dexterity;
+        var newSta = progression.Stamina;
+        var newUnspent = progression.UnspentPoints - 1;
+
+        switch (stat)
         {
-            world.UpdateEntity(updated);
-            _logger.LogInformation("Player {PlayerId} allocated point to {Stat}. New value: {Value}",
-                playerId, stat, GetStatValue(updated, stat));
+            case StatType.Strength:
+                newStr++;
+                break;
+            case StatType.Dexterity:
+                newDex++;
+                break;
+            case StatType.Stamina:
+                newSta++;
+                break;
+            default:
+                return;
         }
-    }
 
-    private static Entity AllocateStamina(Entity player)
-    {
-        var newStamina = player.Stamina + 1;
-        var newMaxHealth = ProgressionFormulas.MaxHealth(newStamina);
-        var healthIncrease = ProgressionFormulas.HealthPerStamina;
+        var newMaxHealth = ProgressionFormulas.MaxHealth(newSta);
+        var newHealth = stat == StatType.Stamina
+            ? player.Health + ProgressionFormulas.HealthPerStamina
+            : player.Health;
 
-        return player with
+        // Update entity (only Health/MaxHealth change for Stamina allocation)
+        if (stat == StatType.Stamina)
         {
-            Stamina = newStamina,
-            MaxHealth = newMaxHealth,
-            Health = player.Health + healthIncrease,
-            UnspentPoints = player.UnspentPoints - 1
-        };
+            world.UpdateEntity(player with { Health = newHealth, MaxHealth = newMaxHealth });
+        }
+
+        _logger.LogInformation("Player {ConnectionId} allocated point to {Stat}. New value: {Value}",
+            connectionId, stat, stat switch
+            {
+                StatType.Strength => newStr,
+                StatType.Dexterity => newDex,
+                StatType.Stamina => newSta,
+                _ => 0
+            });
+
+        // Record progression update for this player
+        var progressionUpdate = new ProgressionUpdate(
+            progression.Level,
+            progression.Experience,
+            newStr,
+            newDex,
+            newSta,
+            newUnspent,
+            newMaxHealth
+        );
+        _pendingProgressionUpdates[connectionId] = progressionUpdate;
+
+        // Queue persistence operation for stats
+        var charId = session.CharacterId;
+        var xp = progression.Experience;
+        var level = progression.Level;
+
+        _pendingPersistenceOps.Enqueue(new PersistenceOp(charId, async svc =>
+            await svc.UpdateProgressionAsync(charId, xp, level, newStr, newDex, newSta, newUnspent)));
     }
 
-    private static int GetStatValue(Entity entity, StatType stat) => stat switch
+    private (WorldState? world, Entity? player) FindPlayer(string connectionId)
     {
-        StatType.Strength => entity.Strength,
-        StatType.Dexterity => entity.Dexterity,
-        StatType.Stamina => entity.Stamina,
-        _ => 0
-    };
+        return FindPlayerInternal(connectionId);
+    }
 
-    private (WorldState? world, Entity? player) FindPlayer(PlayerId playerId)
+    private (WorldState? world, Entity? player) FindPlayerInternal(string connectionId)
     {
-        if (!_players.TryGetValue(playerId, out var playerState))
+        if (!_sessions.TryGetValue(connectionId, out var session))
             return (null, null);
 
-        if (!_worlds.TryGetValue(playerState.CurrentWorldId, out var world))
+        if (!_worlds.TryGetValue(session.CurrentWorldId, out var world))
             return (null, null);
 
-        var entity = world.GetEntity(playerId.Value);
+        var entity = world.GetEntity(connectionId);
         return (world, entity);
     }
 
     private async Task Broadcast()
     {
-        // Group players by world and send world-specific snapshots
-        var playersByWorld = _players.Values
-            .GroupBy(p => p.CurrentWorldId)
+        // Group sessions by world and send world-specific snapshots
+        var sessionsByWorld = _sessions.Values
+            .GroupBy(s => s.CurrentWorldId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        foreach (var (worldId, players) in playersByWorld)
+        foreach (var (worldId, sessions) in sessionsByWorld)
         {
             if (!_worlds.TryGetValue(worldId, out var world)) continue;
 
@@ -555,27 +841,30 @@ public class GameLoopService : BackgroundService
             // Create snapshot with tiles (for players who need them)
             WorldSnapshot? snapshotWithTiles = null;
 
-            foreach (var playerState in players)
+            foreach (var session in sessions)
             {
                 // Only include tiles if we haven't sent this world's tiles before
-                bool needsTiles = !playerState.SentTilesWorldIds.Contains(worldId);
+                bool needsTiles = !session.SentTilesWorldIds.Contains(worldId);
 
                 if (needsTiles)
                 {
                     // Lazily create the full snapshot only if needed
                     snapshotWithTiles ??= world.ToSnapshot(_tick, includeTiles: true, attackEvents, levelUpEvents);
-                    _logger.LogInformation("Sending tiles to {PlayerId}, count: {Count}",
-                        playerState.Id, snapshotWithTiles.Tiles?.Count ?? 0);
-                    playerState.SentTilesWorldIds.Add(worldId);
-                    await _hubContext.Clients.Client(playerState.Id.Value).OnWorldUpdate(snapshotWithTiles);
+                    _logger.LogInformation("Sending tiles to {ConnectionId}, count: {Count}",
+                        session.ConnectionId, snapshotWithTiles.Tiles?.Count ?? 0);
+                    session.SentTilesWorldIds.Add(worldId);
+                    await _hubContext.Clients.Client(session.ConnectionId).OnWorldUpdate(snapshotWithTiles);
                 }
                 else
                 {
-                    await _hubContext.Clients.Client(playerState.Id.Value).OnWorldUpdate(snapshotWithoutTiles);
+                    await _hubContext.Clients.Client(session.ConnectionId).OnWorldUpdate(snapshotWithoutTiles);
                 }
 
                 // Send XP events individually to this player
-                await SendXpEventsToPlayer(worldId, playerState.Id);
+                await SendXpEventsToPlayer(worldId, session.ConnectionId);
+
+                // Send progression update if one is pending
+                await SendProgressionUpdateToPlayer(session.ConnectionId);
             }
 
             // Clear XP events for this world after sending
@@ -583,10 +872,18 @@ public class GameLoopService : BackgroundService
         }
     }
 
-    private async Task SendXpEventsToPlayer(WorldId worldId, PlayerId playerId)
+    private async Task SendProgressionUpdateToPlayer(string connectionId)
+    {
+        if (_pendingProgressionUpdates.TryRemove(connectionId, out var update))
+        {
+            await _hubContext.Clients.Client(connectionId).OnProgressionUpdate(update);
+        }
+    }
+
+    private async Task SendXpEventsToPlayer(WorldId worldId, string connectionId)
     {
         if (!_worldPlayerXpEvents.TryGetValue(worldId, out var playerXpEvents)) return;
-        if (!playerXpEvents.TryGetValue(playerId, out var xpEvents)) return;
+        if (!playerXpEvents.TryGetValue(connectionId, out var xpEvents)) return;
 
         List<XpGainEvent> eventsToSend;
         lock (xpEvents)
@@ -596,6 +893,6 @@ public class GameLoopService : BackgroundService
             xpEvents.Clear();
         }
 
-        await _hubContext.Clients.Client(playerId.Value).OnXpGain(eventsToSend);
+        await _hubContext.Clients.Client(connectionId).OnXpGain(eventsToSend);
     }
 }

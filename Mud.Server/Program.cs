@@ -2,9 +2,13 @@ using Mud.Server.Hubs;
 using Mud.Server.Services;
 using Mud.Server.Components;
 using Mud.Client.Services;
+using Mud.DependencyInjection;
 using Microsoft.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Mud infrastructure (database, identity, persistence)
+builder.Services.AddMudServices(builder.Configuration, builder.Environment.IsDevelopment());
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -37,6 +41,10 @@ else
 }
 
 app.UseHttpsRedirection();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();

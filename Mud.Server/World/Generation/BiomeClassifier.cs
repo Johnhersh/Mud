@@ -1,4 +1,4 @@
-using Mud.Shared.World;
+using Mud.Core.World;
 
 namespace Mud.Server.World.Generation;
 

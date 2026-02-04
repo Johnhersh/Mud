@@ -1,14 +1,16 @@
-using Mud.Shared;
+using Mud.Core;
 
 namespace Mud.Server.World;
 
 /// <summary>
-/// Tracks player state across worlds
+/// Tracks session data for a connected player (transient, lost on disconnect).
 /// </summary>
-public class PlayerState
+public class PlayerSession
 {
-    public PlayerId Id { get; init; }
-    public string Name { get; set; } = string.Empty;
+    public required string ConnectionId { get; init; }
+    public required AccountId AccountId { get; init; }
+    public required CharacterId CharacterId { get; init; }
+    public required string Name { get; init; }
     public WorldId CurrentWorldId { get; set; }
     public Point Position { get; set; } = new(0, 0);
     public Point LastOverworldPosition { get; set; } = new(0, 0);

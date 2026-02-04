@@ -1,6 +1,6 @@
 using MessagePack;
 
-namespace Mud.Shared.World;
+namespace Mud.Core.World;
 
 /// <summary>
 /// Biome classification for terrain generation
