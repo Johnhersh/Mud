@@ -168,12 +168,31 @@ Follow the project structure (e.g., `Mud.Server.Services`, `Mud.Core.Models`).
 - `GameLoopService` is registered as a Singleton and a HostedService in the server.
 - `GameClient` is registered as a Scoped service in the client.
 
+## 📥 Receiving Feedback
+
+When receiving code suggestions (from code-quality-reviewer, user comments, or PR feedback):
+
+1. **Verify first** - Check if the feedback applies to the actual code as written
+2. **Check against architecture** - Does it conflict with documented decisions in this file?
+3. **Push back when warranted**:
+   - Breaks existing functionality
+   - Adds speculative complexity (YAGNI violation)
+   - Conflicts with State Architecture or other documented patterns
+   - Reviewer lacks full context
+4. **Respond factually** - "Fixed: [change]" or "Won't fix: [reason]"
+5. **No performative agreement** - Skip "Great point!" or "You're right!" Just fix it or explain why not.
+
+If you pushed back and were wrong, state the correction factually and move on. No long apologies.
+
 ## ⚠️ Gotchas & Patterns
 
 - **Coordinate System**: The game uses a tile-based coordinate system. Camera is centered on the player by offsetting to (400, 300) on the 800x600 canvas.
 - **Input Handling**: Keyboard events are captured in `Game.razor` and sent to the server via `GameClient.MoveAsync`.
 - **Collision**: Basic wall collision is handled server-side in `GameLoopService.Update()`.
 - **Prerendering**: Interactive WebAssembly components are configured with `prerender: false` in `App.razor` to avoid issues with JS Interop during initial load.
+  - **Symptom**: "JavaScript interop calls cannot be issued at this time" or null reference on `IJSRuntime` during render.
+- **MessagePack Serialization**: All shared models need `[MessagePackObject]` and `[Key(n)]` attributes.
+  - **Symptom**: "Failed to serialize" errors or silent SignalR message failures.
 
 ## 📋 Task Planning & Implementation
 

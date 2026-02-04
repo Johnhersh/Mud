@@ -40,6 +40,9 @@ When the user asks "what should I work on next":
    - Visual requirements (ASCII characters, colors, animations)
    - Scaling concerns (player count, world size)
    - **DO NOT explore code during this phase** - focus on product goals.
+   - **Prefer multiple choice** - Offer 2-4 concrete options rather than open-ended questions when possible.
+   - **Lead with your recommendation** - State which option you'd choose and why.
+   - **Present 2-3 approaches** - Before settling on a direction, briefly present alternatives with trade-offs.
 4. **Create Initial Task Document** - Once broad strokes are understood:
    - Create a `.md` file in `.agent/tasks/` with the objective and what's known so far.
    - Update this document incrementally as each question is answered.

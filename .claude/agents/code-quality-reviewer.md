@@ -240,3 +240,16 @@ One paragraph overall assessment.
 - Respect scope: Don't suggest refactoring unrelated code
 
 You are here to help maintain code quality while respecting the developer's time. A good review catches real issues without creating busywork.
+
+## Common Rationalizations (Don't Accept)
+
+When reviewing code, watch for these excuses. They usually indicate a real issue being avoided:
+
+| Excuse | Reality |
+|--------|---------|
+| "It's just a prototype" | Prototypes become production. Do it right now. |
+| "I'll fix the pragma later" | Later never comes. Fix now or get explicit approval. |
+| "Async would require too many changes" | Sync-over-async causes deadlocks. Propagate async up the chain. |
+| "The warning is a false positive" | Prove it. Show why the compiler is wrong. |
+| "This is temporary" | Temporary code is permanent code without tests. |
+| "It works" | Working code can still have latent bugs, perf issues, or maintainability problems. |
