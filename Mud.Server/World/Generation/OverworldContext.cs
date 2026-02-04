@@ -16,8 +16,7 @@ public static class OverworldContext
         int ghostPadding = instance.GhostPadding;
 
         // Guard: no blending if no ghost padding
-        if (ghostPadding == 0)
-            return instance;
+        if (ghostPadding == 0) return instance;
 
         var biomes = instance.Biomes;
         var noise = instance.Noise;
@@ -80,8 +79,7 @@ public static class OverworldContext
                 AccumulateInfluence(ref targetSum, ref weightSum, seInfluence, neighbors.SouthEast);
 
                 // Skip if no influence (position far from all edges)
-                if (weightSum <= 0f)
-                    continue;
+                if (weightSum <= 0f) continue;
 
                 // Calculate weighted target and total influence
                 float weightedTarget = targetSum / weightSum;
