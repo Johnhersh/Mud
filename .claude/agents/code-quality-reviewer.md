@@ -179,6 +179,40 @@ When found:
 3. If there's a legitimate reason to keep it synchronous (e.g., implementing a sync interface that cannot be changed, or startup/initialization code where async isn't feasible), the user must explicitly approve it with justification
 4. Present the deadlock risk and performance implications
 
+**Implicit Dependencies (Shadow Coupling)**: New code that implicitly depends on existing code creates maintenance hazards. If the original changes, the dependent code must also change—but nothing enforces this. Look for:
+
+- Constants that are derived from or must match other constants, but are defined separately
+- Hardcoded values that duplicate information already expressed elsewhere (thresholds, sizes, offsets)
+- Parallel data structures that must stay synchronized (same keys, same ordering, same length)
+- Magic numbers that happen to match other values in the codebase
+- Configuration or defaults that mirror values from another location
+
+```csharp
+// BAD - Implicit dependency: if TileSize changes, HalfTile must change too
+public const int TileSize = 20;
+public const int HalfTile = 10;  // Implicitly depends on TileSize
+
+// GOOD - Derive the dependent value
+public const int TileSize = 20;
+public const int HalfTile = TileSize / 2;  // Compiler enforces the relationship
+
+// BAD - Implicit dependency on array ordering
+var names = new[] { "Fire", "Water", "Earth" };
+var colors = new[] { Color.Red, Color.Blue, Color.Brown };  // Must match names order
+
+// GOOD - Couple them explicitly
+var elements = new[] {
+    (Name: "Fire", Color: Color.Red),
+    (Name: "Water", Color: Color.Blue),
+    (Name: "Earth", Color: Color.Brown)
+};
+```
+
+When found:
+1. Flag the implicit dependency
+2. Recommend deriving the value from its source (arithmetic, lookup, or structural coupling)
+3. If derivation isn't possible, recommend co-locating the values with a comment explaining the relationship
+
 **Unexpected Situations Without Mitigation**: When code encounters an unexpected state, it should either:
 - Throw an appropriate exception with a clear message
 - Log the situation and gracefully degrade
@@ -195,6 +229,7 @@ Silent failures or empty catch blocks are unacceptable.
    - Look for dead code, unused variables, unreachable paths
    - Check for duplicated state: Does new code track data that's already stored elsewhere? (e.g., new dictionaries that duplicate existing mappings in services like `GameLoopService._sessions`)
    - Search for sync-over-async patterns: `.Result`, `.Wait()`, `.GetAwaiter().GetResult()` (flag for user approval)
+   - Look for implicit dependencies: Are new constants, thresholds, or values implicitly derived from existing ones? Could changing the original break the new code silently?
 3. **Check Structural Patterns**: Pipeline usage, type safety, switch expressions
 4. **Verify Conventions**: Namespaces, record types, MessagePack attributes
 5. **Assess Readability**: Clear naming, appropriate abstraction level
