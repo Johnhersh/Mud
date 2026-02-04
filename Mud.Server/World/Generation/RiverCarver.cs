@@ -33,8 +33,7 @@ public static class RiverCarver
             new Position(end.X + ghostPadding, end.Y + ghostPadding)
         );
 
-        if (path == null || path.Length == 0)
-            return biomes;
+        if (path == null || path.Length == 0) return biomes;
 
         var newBiomes = (BiomeType[,])biomes.Biomes.Clone();
 

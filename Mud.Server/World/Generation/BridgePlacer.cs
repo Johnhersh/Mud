@@ -22,8 +22,7 @@ public static class BridgePlacer
         {
             for (int y = 2; y < totalHeight - 2; y++)
             {
-                if (tiles[x, y].Type != TileType.Water)
-                    continue;
+                if (tiles[x, y].Type != TileType.Water) continue;
 
                 // Check for horizontal bridge across 2-tile wide river (river flows vertically)
                 // Pattern: Land | Water | Water | Land (horizontally)

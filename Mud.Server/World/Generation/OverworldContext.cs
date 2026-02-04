@@ -113,8 +113,7 @@ public static class OverworldContext
     /// </summary>
     private static void AccumulateInfluence(ref float targetSum, ref float weightSum, float influence, BiomeType biome)
     {
-        if (influence <= 0f)
-            return;
+        if (influence <= 0f) return;
 
         targetSum += BiomeTarget(biome) * influence;
         weightSum += influence;

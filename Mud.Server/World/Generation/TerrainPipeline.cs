@@ -161,9 +161,7 @@ public static class TerrainPipeline
     public static bool IsWalkable(this TileMap map, Point position)
     {
         // Check world boundaries (not ghost area)
-        if (position.X < 0 || position.X >= map.Width ||
-            position.Y < 0 || position.Y >= map.Height)
-            return false;
+        if (position.X < 0 || position.X >= map.Width || position.Y < 0 || position.Y >= map.Height) return false;
 
         int x = position.X + map.GhostPadding;
         int y = position.Y + map.GhostPadding;
