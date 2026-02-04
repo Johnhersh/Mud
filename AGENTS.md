@@ -203,7 +203,7 @@ When the user says to implement a task, look for it in `.agent/tasks/`.
 ## 🏁 Task Closing Flow
 
 When a task is completed and the user says "finalize", "close the task", or "I'm happy with this task", or something similar about ending the task:
-1. **Cleanup**: Delete the corresponding `.md` file from `.agent/tasks/`.
+1. **Cleanup**: Delete the corresponding `.md` file from `.agent/tasks/`. Also delete any temporary Playwright files (screenshots, etc.) left over from testing.
 2. **Documentation Review**: Review what was implemented, then read through `AGENTS.md` and verify the documented architecture still matches the code. Look for:
    - Descriptions that are now outdated or incorrect
    - New systems/patterns that should be documented

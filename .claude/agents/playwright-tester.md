@@ -14,6 +14,12 @@ You will receive:
 1. **Feature description**: What was implemented
 2. **Test instructions**: Step-by-step actions to perform and what to look for
 
+## Test User Credentials
+
+Always use these credentials for testing:
+- **Username**: `testuser`
+- **Password**: `test1234`
+
 ## Process
 
 ### 1. Start the Server
@@ -27,17 +33,9 @@ Wait for it to be ready:
 for i in {1..15}; do curl -s -o /dev/null -w "%{http_code}" http://localhost:5213 2>/dev/null && break || sleep 1; done
 ```
 
-### 2. Navigate to the Game
+### 2. Authenticate
 
-Use Playwright to browse to `http://localhost:5213`:
-```
-mcp__playwright__browser_navigate(url: "http://localhost:5213")
-```
-
-Wait for the Blazor app to fully load (3-5 seconds):
-```
-mcp__playwright__browser_wait_for(time: 5)
-```
+Navigate to `http://localhost:5213` and login with the test user credentials above. If login fails because the user doesn't exist (e.g., database was wiped), register a new account with the same credentials first, then proceed.
 
 ### 3. Take Initial Screenshot
 
@@ -123,27 +121,3 @@ Provide a clear summary:
 - **Game tick timing**: The server ticks every 500ms, so wait at least that long between actions that depend on server state
 - **Movement queuing**: You can queue multiple moves quickly, but they process one per tick
 
-## Example Test Session
-
-Feature: "XP floating text appears when killing monsters"
-
-Test instructions:
-1. Enter the town instance
-2. Find a monster and attack it until dead
-3. Verify "+25 XP" floating text appears
-
-```
-1. Navigate to http://localhost:5213
-2. Wait 5 seconds for load
-3. Screenshot: test-initial.png
-4. Press Enter to enter town
-5. Wait 2 seconds
-6. Screenshot: test-entered-town.png
-7. Press Tab to target monster
-8. Wait 1 second
-9. Press f repeatedly to attack (5 times with 600ms waits)
-10. Screenshot: test-after-attacks.png
-11. Check if XP text visible in screenshot
-12. Check console for errors
-13. Report: "Feature verified - XP text visible at position X,Y" or "Feature broken - no floating text, console shows error X"
-```

@@ -45,4 +45,7 @@ public static class WorldConfig
     public const int RiverCostPlains = 3;
     public const int RiverCostForest = 500;  // Very high to avoid cutting through forests
     public const int RiverNoiseScale = 5;    // Random variation to create meandering
+
+    // Edge biome blending
+    public const float EdgeBlendStrength = 1.0f;   // How strongly edges influence noise
 }

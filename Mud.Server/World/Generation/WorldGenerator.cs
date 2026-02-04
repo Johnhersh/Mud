@@ -47,7 +47,7 @@ public static class WorldGenerator
         return new TerrainSeed(instanceSeed, WorldConfig.InstanceWidth, WorldConfig.InstanceHeight)
             .GenerateNoise(WorldConfig.InstanceGhostPadding)
             .ToBiomesWithDensity(densityThreshold)
-            .WithOverworldContext(overworldTerrain, poi.Position)
+            .WithOverworldContext(overworldTerrain, poi.Position, densityThreshold)
             .PlaceExitMarker(poi.Id)
             .ToTileMap()
             .ApplyGrassDensity()
