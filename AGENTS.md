@@ -200,6 +200,15 @@ When the user says they want to plan a new task, or when planning or starting a 
 
 When the user says to implement a task, look for it in `.agent/tasks/`.
 
+### Implementation Workflow
+
+1. **Start implementation**: Create a feature branch with the pattern `feature/feature-name`
+2. **Commit task spec**: Commit the task's `.md` file from `.agent/tasks/` into the branch first
+3. **Implement**: Continue working on the implementation
+4. **Implementation complete**: When work is done and tests pass, ask the user if they want to commit the changes and move to code review
+5. **Code review**: Offer the user a chance to review the code themselves and ask questions about the implementation
+6. **Finalize**: After the user is happy with the code review, ask if they want to close out the task
+
 ## 🏁 Task Closing Flow
 
 When a task is completed and the user says "finalize", "close the task", or "I'm happy with this task", or something similar about ending the task:
