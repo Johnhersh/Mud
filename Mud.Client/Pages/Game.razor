@@ -6,11 +6,12 @@
 @using Mud.Core.World
 @using Mud.Client.Services
 @using Mud.Client.Rendering
+@using Mud.Client.Input
 @inject GameClient GameClient
 @inject GameRenderer Renderer
 @inject ImmediateCommands ImmediateCommands
 @inject IJSRuntime JS
-@implements IDisposable
+@implements IAsyncDisposable
 
 <PageTitle>Mud</PageTitle>
 
@@ -22,8 +23,7 @@
     Stamina="@(_progression?.Stamina ?? ProgressionFormulas.BaseStamina)"
     UnspentPoints="@(_progression?.UnspentPoints ?? 0)" />
 
-<div @onkeydown="HandleKeyDown" @onkeydown:preventDefault="true" tabindex="0" style="outline: none;"
-    id="game-container">
+<div id="game-container">
     <h1>Mud V0</h1>
 
     @if (_snapshot != null)
@@ -75,6 +75,7 @@
     private bool _characterSheetOpen;
     private Entity? _playerEntity;
     private ProgressionUpdate? _progression;
+    private KeyboardHandler? _keyHandler;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -83,7 +84,23 @@
             // Step 1: Initialize Phaser (container is now rendered)
             await JS.InvokeVoidAsync("initPhaser", "phaser-container");
 
-            // Step 2: Connect to server
+            // Step 2: Register keyboard handler
+            _keyHandler = await KeyboardHandler.CreateAsync(JS, keys => keys
+                .Add(Code.ArrowUp, () => QueueMove(Direction.Up))
+                .Add(Code.ArrowDown, () => QueueMove(Direction.Down))
+                .Add(Code.ArrowLeft, () => QueueMove(Direction.Left))
+                .Add(Code.ArrowRight, () => QueueMove(Direction.Right))
+                .Add(Code.KeyW, () => QueueMove(Direction.Up))
+                .Add(Code.KeyS, () => QueueMove(Direction.Down))
+                .Add(Code.KeyA, () => QueueMove(Direction.Left))
+                .Add(Code.KeyD, () => QueueMove(Direction.Right))
+                .Add(Code.Tab, OnTabPressed)
+                .Add(Code.KeyF, OnAttackPressed)
+                .Add(Code.KeyC, ToggleCharacterSheet)
+                .Add(Code.Enter, OnEnterPressed)
+                .Add(Code.Escape, OnEscapePressed));
+
+            // Step 3: Connect to server
             _status = GameStatus.Connecting;
             StateHasChanged();
 
@@ -93,7 +110,7 @@
             await GameClient.StartAsync();
             _myPlayerId = GameClient.ConnectionId;
 
-            // Step 3: Join game - snapshots will now arrive with Phaser ready
+            // Step 4: Join game - snapshots will now arrive with Phaser ready
             await GameClient.JoinAsync("Player" + Random.Shared.Next(100));
         }
     }
@@ -144,76 +161,54 @@
         StateHasChanged();
     }
 
-    private async Task HandleKeyDown(KeyboardEventArgs e)
+    // ============ KEYBOARD HANDLERS ============
+
+    private async Task QueueMove(Direction dir)
     {
-        if (_status != GameStatus.Playing) return;
+        if (_status != GameStatus.Playing || _characterSheetOpen) return;
 
-        // Character sheet toggle
-        if (e.Key == "c" || e.Key == "C")
+        if (_localInputQueue.Count > 0)
         {
-            ToggleCharacterSheet();
-            return;
-        }
-
-        // Escape closes character sheet
-        if (e.Key == "Escape" && _characterSheetOpen)
-        {
-            CloseCharacterSheet();
-            return;
-        }
-
-        // Block game input while character sheet is open
-        if (_characterSheetOpen) return;
-
-        if (e.Key == "Tab")
-        {
-            await CycleTarget();
-            return;
-        }
-
-        if (e.Key == "f")
-        {
-            if (_targetId != null)
+            var lastDir = _localInputQueue.Last();
+            if (IsOpposite(lastDir, dir))
             {
                 _localInputQueue.Clear();
-                await GameClient.RangedAttackAsync(_targetId);
-            }
-            return;
-        }
-
-        if (e.Key == "Enter")
-        {
-            await GameClient.InteractAsync();
-            return;
-        }
-
-        Direction? dir = e.Key switch
-        {
-            "ArrowUp" or "w" => Direction.Up,
-            "ArrowDown" or "s" => Direction.Down,
-            "ArrowLeft" or "a" => Direction.Left,
-            "ArrowRight" or "d" => Direction.Right,
-            _ => null
-        };
-
-        if (dir.HasValue)
-        {
-            if (_localInputQueue.Count > 0)
-            {
-                var lastDir = _localInputQueue.Last();
-                if (IsOpposite(lastDir, dir.Value))
-                {
-                    _localInputQueue.Clear();
-                    return;
-                }
-            }
-
-            if (_localInputQueue.Count < 5)
-            {
-                _localInputQueue.Add(dir.Value);
-                await GameClient.MoveAsync(dir.Value);
+                return;
             }
         }
+
+        if (_localInputQueue.Count < 5)
+        {
+            _localInputQueue.Add(dir);
+            await GameClient.MoveAsync(dir);
+        }
+    }
+
+    private async Task OnTabPressed()
+    {
+        if (_status != GameStatus.Playing || _characterSheetOpen) return;
+        await CycleTarget();
+    }
+
+    private async Task OnAttackPressed()
+    {
+        if (_status != GameStatus.Playing || _characterSheetOpen) return;
+        if (_targetId != null)
+        {
+            _localInputQueue.Clear();
+            await GameClient.RangedAttackAsync(_targetId);
+        }
+    }
+
+    private async Task OnEnterPressed()
+    {
+        if (_status != GameStatus.Playing || _characterSheetOpen) return;
+        await GameClient.InteractAsync();
+    }
+
+    private void OnEscapePressed()
+    {
+        if (_characterSheetOpen) CloseCharacterSheet();
     }
 
     private async Task CycleTarget()
@@ -258,6 +253,7 @@
 
     private void ToggleCharacterSheet()
     {
+        if (_status != GameStatus.Playing) return;
         _characterSheetOpen = !_characterSheetOpen;
         StateHasChanged();
     }
@@ -273,11 +269,14 @@
         await GameClient.AllocateStatAsync(stat);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         GameClient.OnWorldUpdate -= HandleWorldUpdate;
         GameClient.OnXpGain -= HandleXpGain;
         GameClient.OnProgressionUpdate -= HandleProgressionUpdate;
+
+        if (_keyHandler != null)
+            await _keyHandler.DisposeAsync();
     }
 
     private class InteractionInfo
