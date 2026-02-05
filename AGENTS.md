@@ -222,4 +222,4 @@ When a task is completed and the user says "finalize", "close the task", or "I'm
    Update stale documentation if needed. Keep additions minimal and high-level - AGENTS.md documents overall architecture for context, not implementation details. If a new system doesn't change how an agent should approach tasks, it probably doesn't need documenting here.
 3. **Verification**: Ensure the project still builds and the todo list is cleared.
 4. **Completion**: Use the `todos` tool to clear the list and provide a concise summary of the final state.
-5. **Git Commit Draft**: Provide a concise (1-2 sentence) summary of the task's purpose and impact, suitable for a git commit message. Focus on "why" and "how" the goal was achieved, rather than listing specific code changes.
+5. **Git Commit Draft**: Provide a concise (1-2 sentence) summary of the task's purpose and impact, suitable for a git commit message. Focus on "why" and "how" the goal was achieved, rather than listing specific code changes. **Do NOT include attribution lines** (e.g., "Co-Authored-By") in commit messages.
