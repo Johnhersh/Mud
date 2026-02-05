@@ -99,6 +99,7 @@ State flows through layers with clear ownership. When adding new state, check if
   - `initPhaser(containerId)`: Initializes Phaser, loads tileset, pre-allocates terrain sprite pools.
   - `executeCommands(commands)`: Processes render commands (CreateSprite, TweenTo, SnapCamera, SetTerrain, etc.).
 - **Location**: JavaScript rendering logic is in `Mud.Server/wwwroot/phaser-renderer.js`.
+- **Keyboard Input**: Captured at document level via `KeyboardHandler` (`Mud.Client/Input/`), not element focus.
 
 ## 🎯 Code Style & Conventions
 
@@ -215,10 +216,10 @@ When a task is completed and the user says "finalize", "close the task", or "I'm
 1. **Cleanup**: Delete the corresponding `.md` file from `.agent/tasks/`. Also delete any temporary Playwright files (screenshots, etc.) left over from testing.
 2. **Documentation Review**: Review what was implemented, then read through `AGENTS.md` and verify the documented architecture still matches the code. Look for:
    - Descriptions that are now outdated or incorrect
-   - New systems/patterns that should be documented
+   - New architectural patterns or systems that affect how components interact
    - State ownership changes (check the State Architecture section)
    - Removed or renamed services/classes still mentioned
-   Update any stale documentation and add new sections if needed.
+   Update stale documentation if needed. Keep additions minimal and high-level - AGENTS.md documents overall architecture for context, not implementation details. If a new system doesn't change how an agent should approach tasks, it probably doesn't need documenting here.
 3. **Verification**: Ensure the project still builds and the todo list is cleared.
 4. **Completion**: Use the `todos` tool to clear the list and provide a concise summary of the final state.
 5. **Git Commit Draft**: Provide a concise (1-2 sentence) summary of the task's purpose and impact, suitable for a git commit message. Focus on "why" and "how" the goal was achieved, rather than listing specific code changes.
