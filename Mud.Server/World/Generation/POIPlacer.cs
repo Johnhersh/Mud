@@ -138,16 +138,15 @@ public static class POIPlacer
     }
 
     /// <summary>
-    /// Check if a position is walkable (Plains biome only)
+    /// Check if a position is walkable (Plains biome only, within playable area)
     /// </summary>
     private static bool IsWalkable(BiomeMap map, Point pos)
     {
+        // Check logical playable area bounds (excludes ghost padding)
+        if (pos.X < 0 || pos.X >= map.Width || pos.Y < 0 || pos.Y >= map.Height) return false;
+
         int x = pos.X + map.GhostPadding;
         int y = pos.Y + map.GhostPadding;
-
-        if (x < 0 || x >= map.Biomes.GetLength(0) ||
-            y < 0 || y >= map.Biomes.GetLength(1))
-            return false;
 
         return map.Biomes[x, y] == BiomeType.Plains;
     }
