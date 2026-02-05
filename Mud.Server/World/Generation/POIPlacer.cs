@@ -95,8 +95,7 @@ public static class POIPlacer
     /// </summary>
     private static Point FindNearestWalkablePosition(BiomeMap map, Point start)
     {
-        if (IsWalkable(map, start))
-            return start;
+        if (IsWalkable(map, start)) return start;
 
         // Spiral search: expand outward in rings
         int maxRadius = Math.Max(map.Width, map.Height);
