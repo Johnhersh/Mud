@@ -9,8 +9,13 @@ echo "=== Configuring user environment ==="
 echo ">>> Starting SSH server..."
 sudo service ssh start
 
+# Install Playwright with Chromium browser
+# Note: This must be done here (not in Dockerfile) because Node comes from a devcontainer feature
+echo ">>> Installing Playwright..."
+npx playwright install chromium --with-deps
+
 # Playwright MCP expects Chrome at /opt/google/chrome/chrome
-# The devcontainer feature installs it elsewhere, so create a symlink
+# Playwright installs it elsewhere, so create a symlink
 echo ">>> Setting up Playwright Chrome symlink..."
 CHROME_PATH=$(find ~/.cache/ms-playwright -name "chrome" -path "*/chrome-linux/*" 2>/dev/null | head -1)
 if [ -n "$CHROME_PATH" ]; then

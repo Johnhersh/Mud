@@ -24,8 +24,9 @@ Always use these credentials for testing:
 
 ### 1. Start the Server
 
-```bash
-dotnet run --project Mud.Server &
+Run the server in the background using the Bash tool's `run_in_background` parameter (do NOT use `&` in the command itself):
+```
+Bash(command: "dotnet run --project Mud.Server", run_in_background: true)
 ```
 
 Wait for it to be ready:
@@ -121,3 +122,28 @@ Provide a clear summary:
 - **Game tick timing**: The server ticks every 500ms, so wait at least that long between actions that depend on server state
 - **Movement queuing**: You can queue multiple moves quickly, but they process one per tick
 
+## Example Test Session
+
+Feature: "XP floating text appears when killing monsters"
+
+Test instructions:
+1. Enter the town instance
+2. Find a monster and attack it until dead
+3. Verify "+25 XP" floating text appears
+
+```
+1. Navigate to http://localhost:5213
+2. Login with testuser/test1234 (register first if user doesn't exist)
+3. Wait for game to load
+4. Screenshot: test-initial.png
+5. Press Enter to enter town
+6. Wait 2 seconds
+7. Screenshot: test-entered-town.png
+8. Press Tab to target monster
+9. Wait 1 second
+10. Press f repeatedly to attack (5 times with 600ms waits)
+11. Screenshot: test-after-attacks.png
+12. Check if XP text visible in screenshot
+13. Check console for errors
+14. Report: "Feature verified - XP text visible at position X,Y" or "Feature broken - no floating text, console shows error X"
+```
