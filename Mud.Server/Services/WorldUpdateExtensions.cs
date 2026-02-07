@@ -1,13 +1,16 @@
 using System.Collections.Concurrent;
 using Mud.Core;
 using Mud.Core.Services;
-using Mud.Server.Services;
+using Mud.Core.World;
+using Mud.Server.World;
+using Mud.Server.World.Generation;
 
-namespace Mud.Server.World;
+namespace Mud.Server.Services;
 
 /// <summary>
-/// Game logic that operates on WorldState + GameState, extracted from GameLoopService
-/// so it can be called directly from tests without SignalR, persistence, or tick timing.
+/// Game logic and infrastructure behavior that operates on WorldState.
+/// Separated from WorldState (pure data) so game rules and serialization
+/// don't live on the data container itself.
 /// </summary>
 public static class WorldUpdateExtensions
 {
@@ -249,6 +252,48 @@ public static class WorldUpdateExtensions
         {
             var levelUpBag = state.LevelUpEvents.GetOrAdd(world.Id, _ => []);
             levelUpBag.Add(new LevelUpEvent(playerId, newLevel, position));
+        }
+
+        /// <summary>
+        /// Find a random walkable position not occupied by any entity.
+        /// </summary>
+        public Point? FindRandomWalkablePosition(Random random, int maxAttempts = 100)
+        {
+            for (int i = 0; i < maxAttempts; i++)
+            {
+                var pos = new Point(
+                    random.Next(0, world.Terrain.Width),
+                    random.Next(0, world.Terrain.Height)
+                );
+
+                if (world.IsWalkable(pos) && !world.Entities.Values.Any(e => e.Position == pos))
+                {
+                    return pos;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Convert to WorldSnapshot for network transmission.
+        /// </summary>
+        public WorldSnapshot ToSnapshot(long tick, bool includeTiles, List<AttackEvent> attackEvents, List<LevelUpEvent>? levelUpEvents = null)
+        {
+            return new WorldSnapshot
+            {
+                Tick = tick,
+                WorldId = world.Id.Value,
+                WorldType = world.Type,
+                Entities = world.Entities.Values.ToList(),
+                Tiles = includeTiles ? world.Terrain.ToTileDataArray() : null,
+                POIs = world.POIs,
+                ExitMarker = world.ExitMarker,
+                Width = world.Terrain.Width,
+                Height = world.Terrain.Height,
+                GhostPadding = world.Terrain.GhostPadding,
+                AttackEvents = attackEvents,
+                LevelUpEvents = levelUpEvents ?? []
+            };
         }
     }
 }
