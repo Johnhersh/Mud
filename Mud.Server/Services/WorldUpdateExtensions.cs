@@ -17,88 +17,81 @@ public static class WorldUpdateExtensions
     extension(WorldState world)
     {
         /// <summary>
-        /// Process one tick of game logic for this world: dequeue player inputs,
-        /// handle movement/collision/combat, update queued paths.
+        /// Process one tick of game logic for this world: dequeue one input per player
+        /// and resolve movement, combat, or collision.
         /// </summary>
         public void UpdateWorld(GameState state, ICharacterCache cache)
         {
-            var players = world.GetPlayers().ToList();
-            foreach (var playerEntity in players)
+            foreach (var player in world.GetPlayers().ToList())
             {
-                var connectionId = playerEntity.Id;
-                if (!state.PlayerInputQueues.TryGetValue(connectionId, out var queue) || !queue.TryDequeue(out var direction))
+                if (!state.PlayerInputQueues.TryGetValue(player.Id, out var queue)
+                    || !queue.TryDequeue(out var direction))
                     continue;
 
-                var player = world.GetEntity(playerEntity.Id);
-                if (player == null) continue;
+                world.ProcessPlayerInput(state, player, queue, direction, cache);
+            }
+        }
 
-                var newPos = direction switch
+        /// <summary>
+        /// Resolve a single player's movement input: bump attack if monster,
+        /// move if walkable, or block if wall.
+        /// </summary>
+        public void ProcessPlayerInput(GameState state, Entity player, ConcurrentQueue<Direction> queue, Direction direction, ICharacterCache cache)
+        {
+            var newPos = player.Position.Adjacent(direction);
+            var monster = world.Entities.Values.FirstOrDefault(e => e.Position == newPos && e.Type == EntityType.Monster);
+
+            if (monster is not null)
+            {
+                // Bump attack — hit the monster, clear remaining queued moves
+                world.ProcessAttack(state, player.Id, monster.Id, isMelee: true, cache);
+                while (queue.TryDequeue(out _)) ;
+                // Re-fetch player after ProcessAttack since XP may have updated entity
+                var updatedPlayer = world.GetEntity(player.Id);
+                if (updatedPlayer is not null) world.UpdateEntity(updatedPlayer with { QueuedPath = [] });
+            }
+            else if (world.IsWalkable(newPos))
+            {
+                // Move — update position and project queued path for the client
+                var queuedPath = world.ProjectQueuedPath(newPos, queue);
+
+                world.UpdateEntity(player with
                 {
-                    Direction.Up => player.Position with { Y = player.Position.Y - 1 },
-                    Direction.Down => player.Position with { Y = player.Position.Y + 1 },
-                    Direction.Left => player.Position with { X = player.Position.X - 1 },
-                    Direction.Right => player.Position with { X = player.Position.X + 1 },
-                    _ => player.Position
-                };
+                    Position = newPos,
+                    QueuedPath = queuedPath
+                });
 
-                // Check for monster at destination
-                var target = world.Entities.Values.FirstOrDefault(e => e.Position == newPos && e.Type == EntityType.Monster);
-                if (target != null)
+                if (state.Sessions.TryGetValue(player.Id, out var session))
                 {
-                    world.ProcessAttack(state, playerEntity.Id, target.Id, isMelee: true, cache);
-                    // Clear queue on attack
-                    while (queue.TryDequeue(out _)) ;
-                    // Re-fetch player after ProcessAttack since it may have been updated with XP
-                    var updatedPlayer = world.GetEntity(playerEntity.Id);
-                    if (updatedPlayer != null)
-                    {
-                        world.UpdateEntity(updatedPlayer with { QueuedPath = new List<Point>() });
-                    }
-                    continue;
-                }
-
-                if (world.IsWalkable(newPos))
-                {
-                    // Update position and recalculate queued path for the client
-                    var currentPos = newPos;
-                    var queuedPath = new List<Point>();
-                    foreach (var queuedDir in queue)
-                    {
-                        currentPos = queuedDir switch
-                        {
-                            Direction.Up => currentPos with { Y = currentPos.Y - 1 },
-                            Direction.Down => currentPos with { Y = currentPos.Y + 1 },
-                            Direction.Left => currentPos with { X = currentPos.X - 1 },
-                            Direction.Right => currentPos with { X = currentPos.X + 1 },
-                            _ => currentPos
-                        };
-
-                        if (!world.IsWalkable(currentPos)) break;
-                        // Also break if there's a monster
-                        if (world.Entities.Values.Any(e => e.Position == currentPos && e.Type == EntityType.Monster)) break;
-
-                        queuedPath.Add(currentPos);
-                    }
-
-                    world.UpdateEntity(player with
-                    {
-                        Position = newPos,
-                        QueuedPath = queuedPath
-                    });
-
-                    // Update session position
-                    if (state.Sessions.TryGetValue(connectionId, out var session))
-                    {
-                        session.Position = newPos;
-                    }
-                }
-                else
-                {
-                    // Blocked: clear the queue
-                    while (queue.TryDequeue(out _)) ;
-                    world.UpdateEntity(player with { QueuedPath = new List<Point>() });
+                    session.Position = newPos;
                 }
             }
+            else
+            {
+                // Blocked by wall — clear queue, stay in place
+                while (queue.TryDequeue(out _)) ;
+                world.UpdateEntity(player with { QueuedPath = new List<Point>() });
+            }
+        }
+
+        /// <summary>
+        /// Project where queued moves would take the player, stopping at walls or monsters.
+        /// Used for rendering transparent queued-path tiles on the client.
+        /// </summary>
+        public List<Point> ProjectQueuedPath(Point startPos, ConcurrentQueue<Direction> queue)
+        {
+            var currentPos = startPos;
+            var path = new List<Point>();
+
+            foreach (var queuedDir in queue)
+            {
+                currentPos = currentPos.Adjacent(queuedDir);
+                if (!world.IsWalkable(currentPos)) break;
+                if (world.Entities.Values.Any(e => e.Position == currentPos && e.Type == EntityType.Monster)) break;
+                path.Add(currentPos);
+            }
+
+            return path;
         }
 
         /// <summary>
@@ -155,10 +148,7 @@ public static class WorldUpdateExtensions
             if (state.Sessions.TryGetValue(attacker.Id, out var session))
             {
                 var progression = cache.GetProgressionAsync(session.CharacterId).GetAwaiter().GetResult();
-                if (progression != null)
-                {
-                    return (progression.Strength, progression.Dexterity);
-                }
+                if (progression is not null) return (progression.Strength, progression.Dexterity);
             }
 
             // Fallback to base stats
