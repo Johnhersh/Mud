@@ -12,6 +12,7 @@ The solution is divided into these projects:
   - `Mud.Core.Models`: Domain entities (`ApplicationUser`, `CharacterEntity`) and Identity integration.
 - **Mud.Infrastructure**: EF Core implementations (`MudDbContext`, `PersistenceService`, `CharacterCache`).
 - **Mud.DependencyInjection**: Service registration and configuration.
+- **Mud.Tests**: TUnit integration tests. Tests game logic by creating `GameState`/`WorldState` directly and calling extension methods — no SignalR, no database, no tick timer.
 
 ## 🏛 Architectural Principles
 
@@ -52,7 +53,7 @@ Mud.Client ───────────────────────
 - **Server URL**: `http://localhost:5213` (configured in `launchSettings.json`)
 
 ### Testing
-- **Run Tests**: `dotnet test` (Note: No unit tests are currently implemented)
+- **Run Tests**: `dotnet test` (runs TUnit integration tests in `Mud.Tests`)
 - **Visual Testing**: Use Playwright via MCP to verify features work in the browser (see `.agent/TESTING_AGENT.md`)
 
 ## 📡 Networking & Serialization
@@ -83,7 +84,7 @@ State flows through layers with clear ownership. When adding new state, check if
 
 1. **Database** (`CharacterEntity` in `Mud.Core.Models`) - Source of truth for persistence. Progression saved immediately; volatile state (health, position) saved on disconnect.
 2. **CharacterCache** - Read-through cache (30min expiry) for progression lookups. Invalidated on write.
-3. **GameLoopService** - Owns ephemeral session state (`_sessions`), world state (`_worlds`), input queues, and per-tick event queues (attacks, XP, level-ups).
+3. **GameState** - Owns all mutable game state: worlds, sessions, input queues, and per-tick event queues (attacks, XP, level-ups). Lives inside `GameLoopService` but can be created independently for testing.
 4. **WorldState.Entities** - Per-world entity state (position, health, level). Server is authoritative.
 5. **Client** - Optimistic UI state (local input queue, target selection, render cache). Server state always wins on conflict.
 
@@ -189,7 +190,7 @@ If you pushed back and were wrong, state the correction factually and move on. N
 
 - **Coordinate System**: The game uses a tile-based coordinate system. Camera is centered on the player by offsetting to (400, 300) on the 800x600 canvas.
 - **Input Handling**: Keyboard events are captured in `Game.razor` and sent to the server via `GameClient.MoveAsync`.
-- **Collision**: Basic wall collision is handled server-side in `GameLoopService.Update()`.
+- **Collision**: Basic wall collision is handled server-side in `WorldUpdateExtensions.UpdateWorld()`.
 - **Prerendering**: Interactive WebAssembly components are configured with `prerender: false` in `App.razor` to avoid issues with JS Interop during initial load.
   - **Symptom**: "JavaScript interop calls cannot be issued at this time" or null reference on `IJSRuntime` during render.
 - **MessagePack Serialization**: All shared models need `[MessagePackObject]` and `[Key(n)]` attributes.
