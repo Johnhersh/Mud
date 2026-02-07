@@ -46,9 +46,7 @@ public static class WorldUpdateExtensions
                 // Bump attack — hit the monster, clear remaining queued moves
                 world.ProcessAttack(state, player.Id, monster.Id, isMelee: true, cache);
                 while (queue.TryDequeue(out _)) ;
-                // Re-fetch player after ProcessAttack since XP may have updated entity
-                var updatedPlayer = world.GetEntity(player.Id);
-                if (updatedPlayer is not null) world.UpdateEntity(updatedPlayer with { QueuedPath = [] });
+                world.UpdateEntity(player.Id, e => e with { QueuedPath = [] });
             }
             else if (world.IsWalkable(newPos))
             {
@@ -70,7 +68,7 @@ public static class WorldUpdateExtensions
             {
                 // Blocked by wall — clear queue, stay in place
                 while (queue.TryDequeue(out _)) ;
-                world.UpdateEntity(player with { QueuedPath = new List<Point>() });
+                world.UpdateEntity(player with { QueuedPath = [] });
             }
         }
 

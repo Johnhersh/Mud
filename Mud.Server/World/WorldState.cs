@@ -32,4 +32,9 @@ public class WorldState
     public void AddEntity(Entity entity) => Entities[entity.Id] = entity;
     public bool RemoveEntity(string entityId) => Entities.TryRemove(entityId, out _);
     public void UpdateEntity(Entity entity) => Entities[entity.Id] = entity;
+    public void UpdateEntity(string entityId, Func<Entity, Entity> transform)
+    {
+        if (Entities.TryGetValue(entityId, out var current))
+            Entities[entityId] = transform(current);
+    }
 }
