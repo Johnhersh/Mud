@@ -9,12 +9,7 @@
 		"source=claude-config,target=/home/vscode/.claude,type=volume"
 	],
 	"features": {
-		"ghcr.io/devcontainers/features/node:1": {},
-		"ghcr.io/schlich/devcontainer-features/playwright:0": {
-			"version": "latest",
-			"install-deps": true,
-			"browsers": "chromium"
-		}
+		"ghcr.io/devcontainers/features/node:1": {}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// Port 22 for SSH access

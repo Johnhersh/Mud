@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Infrastructure", "Mud.I
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.DependencyInjection", "Mud.DependencyInjection\Mud.DependencyInjection.csproj", "{E2F108DF-DE97-468F-8F07-4818DBB4E3F3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mud.Tests", "Mud.Tests\Mud.Tests.csproj", "{57A8A432-2D29-4DC7-BCF2-7AAD23827042}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -99,6 +101,18 @@ Global
 		{E2F108DF-DE97-468F-8F07-4818DBB4E3F3}.Release|x64.Build.0 = Release|Any CPU
 		{E2F108DF-DE97-468F-8F07-4818DBB4E3F3}.Release|x86.ActiveCfg = Release|Any CPU
 		{E2F108DF-DE97-468F-8F07-4818DBB4E3F3}.Release|x86.Build.0 = Release|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Debug|x64.Build.0 = Debug|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Debug|x86.Build.0 = Debug|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Release|x64.ActiveCfg = Release|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Release|x64.Build.0 = Release|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Release|x86.ActiveCfg = Release|Any CPU
+		{57A8A432-2D29-4DC7-BCF2-7AAD23827042}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

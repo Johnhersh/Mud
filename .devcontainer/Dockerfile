@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/dotnet:1-9.0-bookworm
+FROM mcr.microsoft.com/devcontainers/dotnet:10.0
 
 # FIX: Remove the broken Yarn repository list that is causing the "not signed" error
 # We also run apt-get update to ensure the package list is clean for subsequent features

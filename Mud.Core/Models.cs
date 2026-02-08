@@ -122,6 +122,21 @@ public enum Direction
     Right
 }
 
+public static class PointExtensions
+{
+    extension(Point position)
+    {
+        public Point Adjacent(Direction direction) => direction switch
+        {
+            Direction.Up => position with { Y = position.Y - 1 },
+            Direction.Down => position with { Y = position.Y + 1 },
+            Direction.Left => position with { X = position.X - 1 },
+            Direction.Right => position with { X = position.X + 1 },
+            _ => position
+        };
+    }
+}
+
 /// <summary>
 /// Strongly-typed player identifier (wraps SignalR connection ID).
 /// </summary>
