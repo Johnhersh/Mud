@@ -60,7 +60,7 @@ Mud.Client ───────────────────────
 
 - **Protocol**: SignalR with **MessagePack** binary serialization.
 - **Serialization**: All shared models in `Mud.Core` must be decorated with `[MessagePackObject]` and properties with `[Key(n)]`.
-- **Game Loop**: The server runs a `BackgroundService` (`GameLoopService`) that ticks every 500ms.
+- **Game Loop**: The server runs a `BackgroundService` (`GameLoopService`) that ticks every 300ms.
 - **Movement Queuing**: Players can queue up to 5 moves. The server processes one move per tick. Queued paths are rendered with transparency.
 - **Snapshots**: The server broadcasts a `WorldSnapshot` to all clients every tick.
 - **Combat System**:
@@ -159,6 +159,9 @@ ToBiomesWithDensity()   // Custom density for instances
 ToBiomes()
 ToBiomes(float, float)
 ```
+
+### Data/Behavior Separation
+Data containers (`WorldState`, `GameState`) hold only data and computed accessors. Game logic lives in C# 14 extension methods in separate files (`WorldUpdateExtensions.cs`, `GameStateExtensions.cs` in `Services/`). This keeps data classes testable and prevents them from accumulating behavior.
 
 ### CSS Isolation
 Use Blazor CSS isolation (`Component.razor.css`) instead of inline styles or global CSS.
