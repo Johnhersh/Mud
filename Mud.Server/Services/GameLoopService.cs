@@ -96,7 +96,7 @@ public class GameLoopService : BackgroundService
             _state.Overworld.Terrain.Width, _state.Overworld.Terrain.Height, _state.Overworld.POIs.Count);
     }
 
-    private void SpawnMonsters(WorldState world, int count)
+    private static void SpawnMonsters(WorldState world, int count)
     {
         var random = new Random(WorldConfig.WorldSeed);
         for (int i = 0; i < count; i++)
@@ -207,22 +207,7 @@ public class GameLoopService : BackgroundService
 
     public void RemovePlayer(string connectionId)
     {
-        if (_state.Sessions.TryRemove(connectionId, out var session))
-        {
-            // Remove from current world
-            if (_state.Worlds.TryGetValue(session.CurrentWorldId, out var world))
-            {
-                world.RemoveEntity(connectionId);
-
-                // Clean up instance if empty
-                if (world.Type == WorldType.Instance && !world.GetPlayers().Any())
-                {
-                    _state.Worlds.TryRemove(world.Id, out _);
-                    _logger.LogInformation("Instance {WorldId} destroyed (empty)", world.Id);
-                }
-            }
-        }
-        _state.PlayerInputQueues.TryRemove(connectionId, out _);
+        _state.RemovePlayer(connectionId);
     }
 
     /// <summary>
