@@ -221,7 +221,7 @@ public class GameLoopService : BackgroundService
             var (world, entity) = FindPlayerInternal(connectionId);
 
             // Save state if we have entity
-            if (entity != null)
+            if (entity is not null)
             {
                 // Determine overworld position
                 var (overworldX, overworldY) = session.CurrentWorldId == _state.Overworld.Id
